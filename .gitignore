@@ -1,0 +1,13 @@
+# Reference material derived from the RNCK #14 talk video.
+# Local study aid only — stills from someone else's recording aren't ours to
+# redistribute, and the video is far too heavy for git. transcripts/ARCHITECTURE.md
+# is the written record and is committed.
+transcripts/video/
+transcripts/frames/
+
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
