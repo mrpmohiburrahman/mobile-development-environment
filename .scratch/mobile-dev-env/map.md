@@ -22,13 +22,21 @@ Done when someone can clone it, run two commands, drag a colour picker, and see 
 - [Stack](issues/02-stack.md) — Expo Router + Zustand. File-based routing lets the blueprint enumerate screens instead of hand-importing them; Zustand's store renders directly in the state panel.
 - [Token scope](issues/03-token-scope.md) — colours + spacing + radius + typography + light/dark themes. The talk shipped colours only and named the rest as future work; doing it is our differentiator.
 - [Shareability](issues/04-shareability.md) — GitHub repo + README GIFs + a read-only web deploy whose token edits are in-memory (disk writes are local-only by nature).
+- [Token file and server](issues/05-token-file-and-server.md) — dotted paths across all five families; dependency-free Node stdlib server; edits are an override layer, which is what makes one code path serve both the local and deployed modes.
+- [Designing prop](issues/06-designing-prop.md) — a context, not a prop. Expo Router owns screen mounting, so there is no call site to thread a prop from.
+- [Blueprint view](issues/07-blueprint-view.md) — screens enumerated from the router with `require.context`, so the artboard cannot go stale when a route is added.
+- [Token editor panel](issues/08-token-editor-panel.md) — native `<input type="color">` and `type="range"`; no picker dependency.
+- [State inspector](issues/09-state-inspector.md) — recursive tree over the Zustand store, no devtools integration needed.
+- [Demo app screens](issues/10-demo-app-screens.md) — seven screens on seeded local data, all rendering through token-reading components.
+
+**Verified working end to end** (commit `a247613`): server write → Fast Refresh → every screen repaints at once; an edit produces exactly one line of diff; `POST /revert` returns the file to clean; unknown token paths are rejected.
 
 ## Not yet specified
 
-- How screens declare themselves to the blueprint under Expo Router — filesystem enumeration vs an explicit manifest. Depends on how `designing` ends up being threaded (see ticket 06).
 - Whether the state panel needs time-travel/history or just a live tree.
 - Visual regression testing on the web build — the talk floated it; may be out of scope for v1.
 - Whether typography tokens need a font-loading story or can assume system fonts.
+- Whether the deployed build should hide the `state` tab, since Zustand state there is per-visitor and resets on reload.
 
 ## Out of scope
 
