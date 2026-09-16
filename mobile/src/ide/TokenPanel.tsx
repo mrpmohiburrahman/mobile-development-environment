@@ -17,8 +17,8 @@ const ColorInput = ({ value, onChange }: { value: string; onChange: (v: string) 
       width: 26,
       height: 26,
       padding: 0,
-      border: '1px solid #444',
-      borderRadius: 6,
+      border: '1px solid #3A3129',
+      borderRadius: 8,
       background: 'none',
       cursor: 'pointer',
     },
@@ -41,12 +41,12 @@ const RangeInput = ({
     max,
     value,
     onChange: (e: any) => onChange(Number(e.target.value)),
-    style: { width: 96, accentColor: '#E4572E', cursor: 'pointer' },
+    style: { width: 96, accentColor: '#FF7A4C', cursor: 'pointer' },
   });
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={{ gap: 6, marginBottom: 18 }}>
-    <Text role="caption" style={{ color: '#777', letterSpacing: 1 }}>
+    <Text role="caption" style={{ color: '#9C928A', letterSpacing: 1, fontWeight: 600 }}>
       {title.toUpperCase()}
     </Text>
     {children}
@@ -55,7 +55,7 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
 
 const Line = ({ name, children }: { name: string; children: React.ReactNode }) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-    <Text role="caption" style={{ color: '#ccc', fontFamily: 'monospace' }}>
+    <Text role="caption" style={{ color: '#EDE7E0', fontFamily: 'monospace' }}>
       {name}
     </Text>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>{children}</View>
@@ -78,9 +78,9 @@ export function TokenPanel() {
               paddingVertical: 4,
               paddingHorizontal: 10,
               borderRadius: 999,
-              backgroundColor: scheme === s ? '#E4572E' : '#2a2a2a',
+              backgroundColor: scheme === s ? '#D9481E' : '#2B251F',
             }}>
-            <Text role="caption" style={{ color: scheme === s ? '#fff' : '#999' }}>
+            <Text role="caption" style={{ color: scheme === s ? '#fff' : '#9C928A' }}>
               {s}
             </Text>
           </Pressable>
@@ -90,7 +90,7 @@ export function TokenPanel() {
       <Section title={`Colour · ${scheme}`}>
         {Object.entries(tokens.color[scheme]).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#666', fontFamily: 'monospace' }}>
+            <Text role="caption" style={{ color: '#8A8178', fontFamily: 'monospace' }}>
               {value}
             </Text>
             <ColorInput value={value} onChange={(v) => setToken(`color.${scheme}.${name}`, v)} />
@@ -101,7 +101,7 @@ export function TokenPanel() {
       <Section title="Spacing">
         {Object.entries(tokens.space).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#666' }}>
+            <Text role="caption" style={{ color: '#8A8178' }}>
               {value}
             </Text>
             <RangeInput value={value} min={0} max={64} onChange={(v) => setToken(`space.${name}`, v)} />
@@ -112,7 +112,7 @@ export function TokenPanel() {
       <Section title="Radius">
         {Object.entries(tokens.radius).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#666' }}>
+            <Text role="caption" style={{ color: '#8A8178' }}>
               {value}
             </Text>
             <RangeInput
@@ -128,7 +128,7 @@ export function TokenPanel() {
       <Section title="Type scale">
         {Object.entries(tokens.type).map(([name, spec]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#666' }}>
+            <Text role="caption" style={{ color: '#8A8178' }}>
               {spec.size}
             </Text>
             <RangeInput
@@ -148,8 +148,8 @@ export function TokenPanel() {
       {dirty > 0 ? (
         <Pressable
           onPress={revert}
-          style={{ paddingVertical: 8, borderRadius: 8, backgroundColor: '#2a2a2a', alignItems: 'center' }}>
-          <Text role="caption" style={{ color: '#ccc' }}>
+          style={{ paddingVertical: 8, borderRadius: 8, backgroundColor: '#2B251F', alignItems: 'center' }}>
+          <Text role="caption" style={{ color: '#EDE7E0' }}>
             Revert {dirty} edit{dirty === 1 ? '' : 's'}
           </Text>
         </Pressable>

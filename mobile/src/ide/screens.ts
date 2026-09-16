@@ -3,16 +3,21 @@ import type { ComponentType } from 'react';
 /**
  * The blueprint's screen list, read from the router directory at build time.
  *
- * Metro supports `require.context`, so adding a route file puts it on the
+ * Metro supports `require.context` (recursive here, because the four main
+ * screens live in a `(tabs)/` group), so adding a route file puts it on the
  * artboard automatically. The alternative — a hand-written import list, as in
  * the talk this is modelled on — silently goes stale the first time someone
  * adds a screen and forgets, which is exactly the drift the blueprint exists
  * to catch.
  */
-const ctx = (require as any).context('../app', false, /\.tsx$/);
+const ctx = (require as any).context('../app', true, /\.tsx$/);
 
-/** Not routes we want on the artboard: the layout wrapper and the IDE itself. */
-const EXCLUDE = new Set(['./_layout.tsx', './ide.tsx']);
+/** Not routes we want on the artboard: layouts, and the IDE itself. */
+const EXCLUDE = /[\\/]_layout\.tsx$|ide\.tsx$/;
+
+/** Normalise `./\(tabs\)/stats.tsx` → `stats` so group members are plain keys. */
+const normalize = (path: string) =>
+  path.replace(/^\.\//, '').replace(/^\(tabs\)\//, '').replace(/\.tsx$/, '');
 
 /** Reading order for the artboard — roughly the order a user meets them. */
 const ORDER = ['login', 'index', 'habits', 'habit', 'stats', 'profile', 'settings'];
@@ -32,9 +37,9 @@ export type ScreenEntry = {
 
 export const screens: ScreenEntry[] = ctx
   .keys()
-  .filter((k: string) => !EXCLUDE.has(k))
+  .filter((k: string) => !EXCLUDE.test(k))
   .map((k: string) => {
-    const key = k.replace(/^\.\//, '').replace(/\.tsx$/, '');
+    const key = normalize(k);
     return {
       key,
       label: LABELS[key] ?? key[0].toUpperCase() + key.slice(1),

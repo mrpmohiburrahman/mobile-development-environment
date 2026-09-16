@@ -68,6 +68,7 @@ export type Theme = {
   space: Tokens['space'];
   radius: Tokens['radius'];
   type: Tokens['type'];
+  elevation: Tokens['elevation'];
   scheme: Scheme;
 };
 
@@ -81,6 +82,7 @@ export function useTheme(): Theme {
       space: tokens.space,
       radius: tokens.radius,
       type: tokens.type,
+      elevation: tokens.elevation,
       scheme,
     }),
     [tokens, scheme],

@@ -5,25 +5,49 @@ import { DesigningProvider } from './designing';
 import { screens } from './screens';
 import { Text } from '../ui';
 
-const PHONE = { width: 390, height: 844 };
+const PHONE = { width: 390, height: 820 };
+const CHROME = {
+  bg: '#16120F',
+  panel: '#211C18',
+  panelSoft: '#2B251F',
+  border: '#2A231E',
+  text: '#F4EFE9',
+  textMuted: '#9C928A',
+};
 
 /** One screen, constrained to a phone aspect ratio and labelled. */
-function ScreenFrame({ label, children }: { label: string; children: React.ReactNode }) {
-  const t = useTheme();
+function ScreenFrame({ index, label, children }: { index: number; label: string; children: React.ReactNode }) {
   return (
-    <View style={{ gap: t.space.sm }}>
-      <Text role="label" style={{ color: '#8b8b8b' }}>
-        {label}
-      </Text>
+    <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            backgroundColor: '#D9481E',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+          <Text role="caption" style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+            {index}
+          </Text>
+        </View>
+        <Text role="label" style={{ color: CHROME.textMuted }}>
+          {label}
+        </Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: CHROME.border }} />
+      </View>
       <View
         style={{
           width: PHONE.width,
           height: PHONE.height,
-          borderRadius: 28,
+          borderRadius: 30,
           overflow: 'hidden',
-          backgroundColor: t.color.bg,
+          backgroundColor: CHROME.bg,
           borderWidth: 1,
-          borderColor: '#3a3a3a',
+          borderColor: CHROME.border,
+          boxShadow: '0px 0px 0px 1px rgba(255,245,235,0.03), 0px 24px 60px rgba(0,0,0,0.55)',
         }}>
         {children}
       </View>
@@ -54,8 +78,18 @@ export function Blueprint() {
   }, [handleWheel]);
 
   return (
-    <View ref={workspaceRef} style={{ flex: 1, backgroundColor: '#1b1b1b' }}>
-      <ScrollView horizontal contentContainerStyle={{ padding: 32 }}>
+    <View ref={workspaceRef} style={{ flex: 1, backgroundColor: CHROME.bg }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Text role="label" style={{ color: CHROME.text, letterSpacing: 1.2 }}>
+          BLUEPRINT
+        </Text>
+        <View style={{ height: 16, width: 1, backgroundColor: CHROME.border }} />
+        <Text role="caption" style={{ color: CHROME.textMuted }}>
+          {screens.length} screens · live from the same components that ship
+        </Text>
+      </View>
+
+      <ScrollView horizontal contentContainerStyle={{ padding: 24, paddingBottom: 24 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View
             style={{
@@ -65,8 +99,8 @@ export function Blueprint() {
               transform: [{ scale }],
               transformOrigin: 'top left',
             }}>
-            {screens.map(({ key, label, Component }) => (
-              <ScreenFrame key={key} label={label}>
+            {screens.map(({ key, label, Component }, i) => (
+              <ScreenFrame key={key} index={i + 1} label={label}>
                 {/* Inside the artboard every screen is in "designing" mode, so a
                     tap renders inline instead of navigating the whole board away. */}
                 <DesigningProvider>
@@ -83,12 +117,12 @@ export function Blueprint() {
           position: 'absolute',
           bottom: 16,
           right: 16,
-          backgroundColor: '#2a2a2a',
+          backgroundColor: CHROME.panel,
           borderRadius: t.radius.pill,
           paddingVertical: 6,
           paddingHorizontal: 12,
         }}>
-        <Text role="caption" style={{ color: '#aaa' }}>
+        <Text role="caption" style={{ color: CHROME.textMuted }}>
           {Math.round(scale * 100)}% · ctrl+scroll to zoom
         </Text>
       </View>

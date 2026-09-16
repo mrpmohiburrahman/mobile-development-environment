@@ -27,20 +27,21 @@ export default function IDE() {
   }
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#141414' }}>
-      <View style={{ width: 280, borderRightWidth: 1, borderRightColor: '#2a2a2a' }}>
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#13100D' }}>
+      <View style={{ width: 280, borderRightWidth: 1, borderRightColor: '#2A231E' }}>
         <View style={{ flexDirection: 'row', gap: 6, padding: 12 }}>
           {(['tokens', 'state'] as Tab[]).map((name) => (
             <Pressable
               key={name}
               onPress={() => setTab(name)}
-              style={{
+              style={({ pressed }) => ({
                 paddingVertical: 5,
                 paddingHorizontal: 12,
                 borderRadius: 999,
-                backgroundColor: tab === name ? '#E4572E' : '#242424',
-              }}>
-              <Text role="caption" style={{ color: tab === name ? '#fff' : '#999' }}>
+                backgroundColor: tab === name ? '#D9481E' : '#211C18',
+                opacity: pressed ? 0.7 : 1,
+              })}>
+              <Text role="caption" style={{ color: tab === name ? '#fff' : '#9C928A' }}>
                 {name}
               </Text>
             </Pressable>
