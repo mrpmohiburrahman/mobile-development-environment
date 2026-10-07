@@ -2,6 +2,12 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // Lets a module be written with an explicit `.ts` extension on its imports.
+    // Metro resolves those happily, and so does `node --test`, which rejects the
+    // extensionless form Metro allows. Without this, only modules with no runtime
+    // imports can be loaded by the test harness at all — which is why the ds/
+    // seams are written the way they are.
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./src/*"

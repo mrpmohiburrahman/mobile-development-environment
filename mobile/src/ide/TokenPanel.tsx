@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { useTokenStore, useTokens, type Scheme } from '../ds/store';
 import { CHROME, CHROME_RADIUS, TONE } from './chrome';
 import { Label } from './Label';
+import { ShadowInput } from './ShadowInput';
 
 /**
  * Editors are raw DOM inputs. The IDE only ever runs on web, and the platform
@@ -194,6 +195,36 @@ export function TokenPanel() {
             />
           </Line>
         ))}
+      </Section>
+
+      <Section title="Elevation">
+        {Object.entries(tokens.elevation).map(([name, value]) => (
+          <View key={name} style={{ gap: 4, marginBottom: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Label role="caption" color={CHROME.text} style={{ fontFamily: 'monospace' }}>
+                {name}
+                {edited(`elevation.${name}`) ? ' •' : ''}
+              </Label>
+              {edited(`elevation.${name}`) ? (
+                <Pressable
+                  onPress={() => revertToken(`elevation.${name}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Undo this session's edit to ${name}`}
+                  hitSlop={8}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                  <Label role="caption" color={CHROME.textMuted}>
+                    undo
+                  </Label>
+                </Pressable>
+              ) : null}
+            </View>
+            <ShadowInput value={value} onCommit={(next) => setToken(`elevation.${name}`, next)} />
+          </View>
+        ))}
+        <Label role="caption" color={CHROME.textMuted}>
+          A shadow is a whole CSS value, not a number — so this is a text field, not
+          a slider. Validation is the same rule the server uses.
+        </Label>
       </Section>
 
       <Section title="Type scale">

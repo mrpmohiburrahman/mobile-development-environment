@@ -66,7 +66,7 @@ function inRange(value: TokenValue, min: number, max: number): boolean {
  * `tokens.json` has one. Splitting naively on `,` turns a real shadow into four
  * fragments and rejects a perfectly good value — so paren depth is tracked.
  */
-function splitLayers(value: string): string[] {
+export function splitLayers(value: string): string[] {
   const layers: string[] = [];
   let depth = 0;
   let current = '';
