@@ -23,6 +23,14 @@ const PORT = Number(process.env.PORT ?? 3001);
 
 const readTokens = async () => JSON.parse(await readFile(TOKENS, 'utf8'));
 
+/** Run a git command in the repo and return stdout. Throws on a non-zero exit. */
+const execFile_ = (cmd, args) =>
+  new Promise((ok, fail) =>
+    execFile(cmd, args, { cwd: ROOT, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) =>
+      err ? fail(new Error(`${cmd} ${args.join(' ')}: ${err.message}`)) : ok(stdout),
+    ),
+  );
+
 // Trailing newline matters: without it every single `git diff` ends in
 // "\ No newline at end of file", which is noise in the exact artifact this
 // tool exists to make readable.
@@ -122,6 +130,24 @@ const server = createServer(async (req, res) => {
         hasBaseline: hasBaseline(),
         baseline: sessionBaseline(),
       });
+    }
+
+    // The token tree as last committed, for baseline mode's second render.
+    //
+    // `git show HEAD:...` rather than `git checkout`, for the same reason the
+    // session revert does not checkout: reading a committed tree must never move
+    // the working file. This is the `execFile` the map says stays — baseline
+    // mode is what needs it.
+    if (req.method === 'GET' && req.url === '/baseline') {
+      const rel = TOKENS.slice(ROOT.length + 1);
+      const committed = await execFile_('git', ['show', `HEAD:${rel}`]);
+      let tree;
+      try {
+        tree = JSON.parse(committed);
+      } catch {
+        return json(res, 500, { error: `HEAD:${rel} is not readable JSON` });
+      }
+      return json(res, 200, { tree, ref: 'HEAD', path: rel });
     }
 
     json(res, 404, { error: 'not found' });

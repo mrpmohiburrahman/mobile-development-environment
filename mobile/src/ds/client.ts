@@ -96,6 +96,27 @@ export async function revertToCommitted(): Promise<boolean> {
 }
 
 /**
+ * The token tree as last committed, for baseline mode.
+ *
+ * Null means "no server, so no committed tree to compare against" — distinct from
+ * an empty tree, which the studio would never produce. `false` for unreachable is
+ * what keeps the compare toggle disabled on the deployed build rather than
+ * offering a comparison that cannot happen.
+ */
+export async function fetchCommittedTokens(): Promise<Record<string, any> | null> {
+  try {
+    const res = await fetch(`${SERVER}/baseline`);
+    if (!res.ok) return null;
+    const { tree } = (await res.json()) as { tree: Record<string, any> };
+    recordReachable(true);
+    return tree;
+  } catch {
+    recordReachable(false);
+    return null;
+  }
+}
+
+/**
  * Whether the server has a baseline to undo to.
  *
  * `false` also covers "no server" — the panel needs to know it cannot offer a

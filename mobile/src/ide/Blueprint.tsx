@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { DesigningProvider } from './designing';
 import { screens } from './screens';
+import { TokensFrom } from '../ds/store';
 import { CHROME, CHROME_RADIUS } from './chrome';
+import { useCommittedTokens } from './BaselinePanel';
 import { DiskBadge } from './DiskBadge';
 import { Label } from './Label';
 
@@ -48,9 +50,22 @@ function ScreenFrame({ index, label, children }: { index: number; label: string;
   );
 }
 
-export function Blueprint() {
+/**
+ * The board of screens, rendered from the real components.
+ *
+ * `comparing` adds a second column drawn from the tokens at `HEAD`, via
+ * `TokensFrom`. Both columns use the same screen components, which is the whole
+ * basis of the comparison — a baseline rendered with different components would
+ * prove nothing. The two trees differ only in their tokens.
+ */
+export function Blueprint({ comparing = false }: { comparing?: boolean }) {
   const [scale, setScale] = useState(0.5);
   const workspaceRef = useRef<View>(null);
+
+  // The committed tree, fetched only when the toggle is on. Null until then, and
+  // null forever with no server — which is why the toggle is disabled there
+  // rather than the column appearing empty.
+  const { tree: baseline } = useCommittedTokens(comparing);
 
   // Ctrl+wheel to zoom, the way a design tool behaves. React Native Web doesn't
   // surface wheel events, so this attaches to the underlying DOM node directly.
@@ -105,6 +120,28 @@ export function Blueprint() {
                 </DesigningProvider>
               </ScreenFrame>
             ))}
+
+            {/* The same screens again, from the tokens at HEAD. Rendered from the
+                same components on purpose: the claim is that the *tokens*
+                drifted, and only an identical component tree can support that.
+                A pinned source gets no override layer, so this column shows the
+                committed state rather than a second copy of the edits. */}
+            {baseline ? (
+              <>
+                <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: CHROME.border, marginVertical: 8 }} />
+                <TokensFrom source={{ kind: 'pinned', tree: baseline, label: 'HEAD' }}>
+                  <>
+                    {screens.map(({ key, label, Component }, i) => (
+                      <ScreenFrame key={`base-${key}`} index={i + 1} label={`${label} · HEAD`}>
+                        <DesigningProvider>
+                          <Component />
+                        </DesigningProvider>
+                      </ScreenFrame>
+                    ))}
+                  </>
+                </TokensFrom>
+              </>
+            ) : null}
           </View>
         </ScrollView>
       </ScrollView>

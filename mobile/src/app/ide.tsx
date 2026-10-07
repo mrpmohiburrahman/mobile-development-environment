@@ -3,10 +3,11 @@ import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
 import { TokenPanel } from '../ide/TokenPanel';
+import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
 import { CHROME, CHROME_RADIUS } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
-type Tab = 'tokens' | 'state';
+type Tab = 'tokens' | 'state' | 'baseline';
 
 /**
  * The studio. This is a route in the mobile app, not a separate project — which
@@ -15,6 +16,9 @@ type Tab = 'tokens' | 'state';
  */
 export default function IDE() {
   const [tab, setTab] = useState<Tab>('tokens');
+  // Whether the blueprint also draws the committed baseline. Kept here rather
+  // than in the panel so the chrome owns layout state and the panel owns content.
+  const [comparing, setComparing] = useState(false);
 
   if (Platform.OS !== 'web') {
     return (
@@ -29,9 +33,9 @@ export default function IDE() {
 
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: CHROME.bg }}>
-      <View style={{ width: 280, borderRightWidth: 1, borderRightColor: CHROME.border }}>
+      <View style={{ width: 300, borderRightWidth: 1, borderRightColor: CHROME.border }}>
         <View style={{ flexDirection: 'row', gap: 6, padding: 12 }}>
-          {(['tokens', 'state'] as Tab[]).map((name) => (
+          {(['tokens', 'state', 'baseline'] as Tab[]).map((name) => (
             <Pressable
               key={name}
               onPress={() => setTab(name)}
@@ -49,11 +53,17 @@ export default function IDE() {
           ))}
         </View>
         <ScrollView contentContainerStyle={{ padding: 12, paddingTop: 0 }}>
-          {tab === 'tokens' ? <TokenPanel /> : <StatePanel />}
+          {tab === 'tokens' ? <TokenPanel /> : tab === 'state' ? <StatePanel /> : <BaselinePanel />}
         </ScrollView>
       </View>
 
-      <Blueprint />
+      <View style={{ flex: 1 }}>
+        {/* Always rendered, so the toggle sits next to the claim it qualifies. */}
+        <View style={{ paddingHorizontal: 24, paddingTop: 16, alignItems: 'flex-start' }}>
+          <BaselineToggle on={comparing} onChange={setComparing} />
+        </View>
+        <Blueprint comparing={comparing} />
+      </View>
     </View>
   );
 }
