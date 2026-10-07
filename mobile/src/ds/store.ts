@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { createContext, createElement, useContext, useMemo } from 'react';
 import { create } from 'zustand';
 import base from './tokens.json';
 import {
@@ -9,8 +9,13 @@ import {
   baselineValueFor,
   type TokenValue,
 } from './client';
-import { applyOverrides } from './applyOverrides';
 import { validateTokenValue } from './tokenValidation';
+import {
+  resolveTokensFor,
+  LIVE,
+  type TokenSource,
+  type Tokens as AnyTokens,
+} from './renderSource';
 
 export { applyOverrides, setPath } from './applyOverrides';
 
@@ -136,10 +141,47 @@ export const useTokenStore = create<State>((set, get) => ({
   },
 }));
 
-/** The whole token tree, with edits applied. */
+/**
+ * Which token tree everything below this provider renders from.
+ *
+ * `null` means live, so no provider is needed for ordinary screens — only the
+ * baseline column supplies one.
+ */
+const TokenSourceContext = createContext<TokenSource | null>(null);
+
+/**
+ * Render `children` against an explicit token tree instead of the live one.
+ *
+ * This is the seam that lets the studio draw a screen twice without touching
+ * `mobile/src/ui`: `useTheme()` calls `useTokens()`, `useTokens()` reads this
+ * context, and every screen inherits it. A pinned source is drawn from *exactly*
+ * the given tree — the override layer is not merged in, which is the decision
+ * `renderSource.ts` records and explains.
+ */
+export function TokensFrom({
+  source,
+  children,
+}: {
+  source: TokenSource;
+  children: React.ReactNode;
+}) {
+  // createElement rather than JSX: this file is a .ts, and renaming it to .tsx
+  // would touch every importer across the app for no benefit.
+  return createElement(TokenSourceContext.Provider, { value: source }, children);
+}
+
+/** The whole token tree for this render, with the right edits applied to it. */
 export function useTokens(): Tokens {
   const overrides = useTokenStore((s) => s.overrides);
-  return useMemo(() => applyOverrides(base, overrides), [overrides]);
+  const source = useContext(TokenSourceContext);
+  const resolved = useMemo(
+    () => resolveTokensFor(source ?? LIVE, base as AnyTokens, overrides),
+    [source, overrides],
+  );
+  // The memo returns AnyTokens; the cast is because the live source always
+  // produces the real Tokens shape, and a pinned one is supplied by the caller
+  // who fetched it from the same source.
+  return resolved as Tokens;
 }
 
 export type Theme = {
