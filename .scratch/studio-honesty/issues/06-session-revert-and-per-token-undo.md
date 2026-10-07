@@ -40,3 +40,15 @@ Session revert replaces the old `git checkout` path; per-token undo folds into t
 `execFile` and `node:child_process` stay — ticket 09 needs `git show`, exactly as the map says.
 
 One judgement call worth flagging: per-token undo costs a `GET /session` per invocation, which returns the whole token tree each time. That is fine at 14 screens and one undo at a time, and I did not add caching or a narrower endpoint since neither is warranted yet. If undo ever needs to be faster than the round trip, that is the place to change.
+
+## Follow-up: two bugs found by driving it, both fixed
+
+Reported while testing the layout, and both were mine — the per-token undo was verified on the server side with `curl` and never clicked in a browser.
+
+**The store was rebuilt empty every time a write landed.** `store.ts` imports `tokens.json` for `useTokens`, and it cannot stop: `mobile/src/ui/index.tsx` is byte-identical and takes `useTheme` from there. The token server rewrites that JSON, so Metro re-evaluated `store.ts` and `create<State>({ overrides: {} })` ran again. The visible damage: the ` •` marker, the per-token `undo` button, and the chosen colour scheme all silently reset the moment an edit landed — so per-token undo was at its least visible in the one mode that has a session baseline. Isolated by stopping the token server, which made every symptom disappear.
+
+Fixed by moving the session into `ds/editorState.ts`, which imports nothing that can change under it. Metro still re-runs `store.ts`; it re-imports the same module instance and gets the same store back. `useTokenStore` is re-exported under its old name so no call site moved. This is the same shape as ticket 03's `reachable` subscription in `client.ts` — external mutable state, outside the React tree, in a module the bundler has no reason to rebuild.
+
+**Undo was visible but inert on the deployed build.** `revertToken` treated "the server gave no baseline" as one case and refused, so clicking it changed nothing and printed a sentence about a restarted server — on a build where the server was never there. There are three cases and they want different things: a known baseline value (write it back, then unmask the file); the server known unreachable (nothing was ever written, so dropping the override *is* the revert — the common case); the server reachable earlier but gone now (a write may have landed, so say the file could not be restored rather than guess). `baselineLost: boolean` became `undoNote: string | null`, because the old single sentence was wrong for two of the three cases.
+
+Verified in Chromium, both modes. With the server: edit → `xs •`, undo at opacity 1, file `31`; click undo → value `7`, marker cleared, file `7`. With no server: edit → marker holds, file unchanged at `7`; click undo → value `7` and the note "space.xs back to the file value — no server, so it was never written". The scheme also survives a write now (switched to dark, edited, still dark).

@@ -153,7 +153,7 @@ export function TokenPanel() {
     overrides,
     rejection,
     canRevertToSession,
-    baselineLost,
+    undoNote,
   } = useTokenStore();
   const dirty = Object.keys(overrides).length;
   const edited = (path: string) => path in overrides;
@@ -351,9 +351,12 @@ export function TokenPanel() {
         </View>
       ) : null}
 
-      {baselineLost ? (
+      {/* What the last per-token undo actually did. The old version printed a
+          fixed sentence about a restarted server, which was wrong for the
+          deployed build — where the server was never there to restart. */}
+      {undoNote ? (
         <Label role="caption" color={TONE.degraded} style={{ marginTop: 8 }}>
-          the token server restarted, so this session has nothing to undo to
+          {undoNote}
         </Label>
       ) : null}
 
