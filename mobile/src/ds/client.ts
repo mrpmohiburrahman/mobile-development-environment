@@ -59,6 +59,13 @@ export async function pushToken(path: string, value: TokenValue): Promise<boolea
   }
 }
 
+/**
+ * Undo everything this session wrote, back to the file as it was when the
+ * session's first edit landed.
+ *
+ * 409 when the session has written nothing: there is no baseline to return to,
+ * so the caller is told rather than left believing an undo happened.
+ */
 export async function revertTokens(): Promise<boolean> {
   try {
     const res = await fetch(`${SERVER}/revert`, { method: 'POST' });
@@ -67,5 +74,70 @@ export async function revertTokens(): Promise<boolean> {
   } catch {
     recordReachable(false);
     return false;
+  }
+}
+
+/**
+ * Back to the last commit.
+ *
+ * Separate from `revertTokens` on purpose and not a parameter: this one destroys
+ * uncommitted work the studio never saw, and folding it into the same call would
+ * make the destructive intent invisible at the call site.
+ */
+export async function revertToCommitted(): Promise<boolean> {
+  try {
+    const res = await fetch(`${SERVER}/revert-committed`, { method: 'POST' });
+    recordReachable(res.ok);
+    return res.ok;
+  } catch {
+    recordReachable(false);
+    return false;
+  }
+}
+
+/**
+ * Whether the server has a baseline to undo to.
+ *
+ * `false` also covers "no server" — the panel needs to know it cannot offer a
+ * session revert, and it should not have to tell a missing server apart from a
+ * fresh one to act on that.
+ */
+export async function sessionHasBaseline(): Promise<boolean> {
+  try {
+    const res = await fetch(`${SERVER}/session`);
+    if (!res.ok) return false;
+    const { hasBaseline } = (await res.json()) as { hasBaseline: boolean };
+    return hasBaseline;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The value one token had at session start, for per-token undo.
+ *
+ * 404 when the server has no baseline, which is also true if it was restarted
+ * mid-session — in that case there is nothing to undo *to*, and the panel says so
+ * rather than restoring something arbitrary.
+ */
+export async function baselineValueFor(path: string): Promise<TokenValue | null | undefined> {
+  try {
+    const res = await fetch(`${SERVER}/session`);
+    if (!res.ok) return undefined;
+    const { baseline } = (await res.json()) as {
+      hasBaseline: boolean;
+      baseline: Record<string, any> | null;
+    };
+    if (!baseline) return undefined;
+    // Walk the dotted path in the baseline tree. Absent means the token was not
+    // there at session start, which the caller treats as "nothing to restore".
+    let node: any = baseline;
+    for (const key of path.split('.')) {
+      if (node === null || typeof node !== 'object' || !(key in node)) return null;
+      node = node[key];
+    }
+    return node as TokenValue;
+  } catch {
+    return undefined;
   }
 }

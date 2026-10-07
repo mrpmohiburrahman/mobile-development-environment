@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTokenStore, useTokens, type Scheme } from '../ds/store';
 import { CHROME, CHROME_RADIUS, TONE } from './chrome';
@@ -54,19 +54,77 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </View>
 );
 
-const Line = ({ name, children }: { name: string; children: React.ReactNode }) => (
+/**
+ * One token row.
+ *
+ * `edited` drives the per-token undo: it appears only for a token this session
+ * changed, so "undo" always has an obvious referent. Per-token undo folds into
+ * the session snapshot rather than being a second mechanism — see `store.ts`.
+ */
+const Line = ({
+  name,
+  edited,
+  onUndo,
+  children,
+}: {
+  name: string;
+  edited?: boolean;
+  onUndo?: () => void;
+  children: React.ReactNode;
+}) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
     <Label role="caption" color={CHROME.text} style={{ fontFamily: 'monospace' }}>
       {name}
+      {edited ? ' •' : ''}
     </Label>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>{children}</View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {children}
+      {edited && onUndo ? (
+        <Pressable
+          onPress={onUndo}
+          accessibilityRole="button"
+          accessibilityLabel={`Undo this session's edit to ${name}`}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: CHROME_RADIUS.sm,
+            opacity: pressed ? 0.6 : 1,
+          })}>
+          <Label role="caption" color={CHROME.textMuted}>
+            undo
+          </Label>
+        </Pressable>
+      ) : null}
+    </View>
   </View>
 );
 
 export function TokenPanel() {
   const tokens = useTokens();
-  const { setToken, scheme, setScheme, revert, overrides, rejection } = useTokenStore();
+  const {
+    setToken,
+    scheme,
+    setScheme,
+    revert,
+    revertToken,
+    revertToCommitted,
+    refreshSessionBaseline,
+    overrides,
+    rejection,
+    canRevertToSession,
+    baselineLost,
+  } = useTokenStore();
   const dirty = Object.keys(overrides).length;
+  const edited = (path: string) => path in overrides;
+
+  // Asked once on mount rather than assumed. `canRevertToSession` starts null and
+  // the button stays disabled until the server has answered, so the panel never
+  // offers an undo that has nothing behind it — including on the deployed build,
+  // where there is no server at all.
+  useEffect(() => {
+    void refreshSessionBaseline();
+  }, [refreshSessionBaseline]);
 
   return (
     <View>
@@ -90,7 +148,11 @@ export function TokenPanel() {
 
       <Section title={`Colour · ${scheme}`}>
         {Object.entries(tokens.color[scheme]).map(([name, value]) => (
-          <Line key={name} name={name}>
+          <Line
+            key={name}
+            name={name}
+            edited={edited(`color.${scheme}.${name}`)}
+            onUndo={() => revertToken(`color.${scheme}.${name}`)}>
             <Label role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }}>
               {value}
             </Label>
@@ -101,7 +163,11 @@ export function TokenPanel() {
 
       <Section title="Spacing">
         {Object.entries(tokens.space).map(([name, value]) => (
-          <Line key={name} name={name}>
+          <Line
+            key={name}
+            name={name}
+            edited={edited(`space.${name}`)}
+            onUndo={() => revertToken(`space.${name}`)}>
             <Label role="caption" color={CHROME.textMuted}>
               {value}
             </Label>
@@ -112,7 +178,11 @@ export function TokenPanel() {
 
       <Section title="Radius">
         {Object.entries(tokens.radius).map(([name, value]) => (
-          <Line key={name} name={name}>
+          <Line
+            key={name}
+            name={name}
+            edited={edited(`radius.${name}`)}
+            onUndo={() => revertToken(`radius.${name}`)}>
             <Label role="caption" color={CHROME.textMuted}>
               {value}
             </Label>
@@ -128,7 +198,11 @@ export function TokenPanel() {
 
       <Section title="Type scale">
         {Object.entries(tokens.type).map(([name, spec]) => (
-          <Line key={name} name={name}>
+          <Line
+            key={name}
+            name={name}
+            edited={edited(`type.${name}.size`)}
+            onUndo={() => revertToken(`type.${name}.size`)}>
             <Label role="caption" color={CHROME.textMuted}>
               {spec.size}
             </Label>
@@ -169,15 +243,60 @@ export function TokenPanel() {
         </View>
       ) : null}
 
+      {/* Uncommitted work from *before* this session is left alone by all of
+          this. That is the difference the ticket is about. */}
       {dirty > 0 ? (
-        <Pressable
-          onPress={revert}
-          style={{ paddingVertical: 8, borderRadius: CHROME_RADIUS.md, backgroundColor: CHROME.panelSoft, alignItems: 'center' }}>
-          <Label role="caption" color={CHROME.text}>
-            Revert {dirty} edit{dirty === 1 ? '' : 's'}
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <Pressable
+            onPress={revert}
+            disabled={!canRevertToSession}
+            accessibilityRole="button"
+            style={({ pressed }) => ({
+              paddingVertical: 8,
+              borderRadius: CHROME_RADIUS.md,
+              backgroundColor: CHROME.panelSoft,
+              alignItems: 'center',
+              opacity: !canRevertToSession ? 0.4 : pressed ? 0.7 : 1,
+            })}>
+            <Label role="caption" color={CHROME.text}>
+              Revert {dirty} edit{dirty === 1 ? '' : 's'} to session start
+            </Label>
+          </Pressable>
+          <Label role="caption" color={CHROME.textMuted}>
+            {canRevertToSession === null
+              ? 'checking for a session baseline…'
+              : canRevertToSession
+                ? 'back to this session’s start, not to the last commit'
+                : 'no session baseline — the server has not recorded a starting point'}
           </Label>
-        </Pressable>
+        </View>
       ) : null}
+
+      {baselineLost ? (
+        <Label role="caption" color={TONE.degraded} style={{ marginTop: 8 }}>
+          the token server restarted, so this session has nothing to undo to
+        </Label>
+      ) : null}
+
+      {/* Separate, and deliberately not adjacent to the button above: this one
+          destroys uncommitted work the studio never saw. */}
+      <Pressable
+        onPress={revertToCommitted}
+        accessibilityRole="button"
+        accessibilityLabel="Discard all uncommitted token changes and go back to the last commit"
+        style={({ pressed }) => ({
+          marginTop: 14,
+          paddingVertical: 7,
+          borderRadius: CHROME_RADIUS.md,
+          borderWidth: 1,
+          borderColor: CHROME.border,
+          alignItems: 'center',
+          opacity: pressed ? 0.7 : 1,
+        })}>
+        <Label role="caption" color={CHROME.textMuted}>
+          Discard everything → last commit
+        </Label>
+      </Pressable>
     </View>
   );
 }
