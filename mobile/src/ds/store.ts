@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import base from './tokens.json';
 import { pushToken, revertTokens, type TokenValue } from './client';
 import { applyOverrides } from './applyOverrides';
+import { validateTokenValue } from './tokenValidation';
 
 export { applyOverrides, setPath } from './applyOverrides';
 
@@ -22,6 +23,14 @@ export type TypeRole = keyof Tokens['type'];
 type State = {
   overrides: Record<string, TokenValue>;
   scheme: Scheme;
+  /**
+   * The last value the studio refused to accept, with the reason.
+   *
+   * Kept as state rather than thrown so the panel can say why a drag stopped
+   * where it did. Cleared on the next accepted edit, so a stale complaint never
+   * outlives the thing it was about.
+   */
+  rejection: { path: string; value: TokenValue; error: string } | null;
   setToken: (path: string, value: TokenValue) => void;
   setScheme: (scheme: Scheme) => void;
   revert: () => void;
@@ -30,13 +39,23 @@ type State = {
 export const useTokenStore = create<State>((set) => ({
   overrides: {},
   scheme: 'light',
+  rejection: null,
   setToken: (path, value) => {
-    set((s) => ({ overrides: { ...s.overrides, [path]: value } }));
+    // Validated here as well as on the server. The server's copy exists because it
+    // must refuse writes from anything that is not this client; this copy exists
+    // because a drag that silently refuses to move feels broken, whereas one that
+    // says "radius must be a number 0–999" is teaching.
+    const verdict = validateTokenValue(path, value);
+    if (!verdict.ok) {
+      set({ rejection: { path, value, error: verdict.error } });
+      return;
+    }
+    set((s) => ({ overrides: { ...s.overrides, [path]: value }, rejection: null }));
     void pushToken(path, value);
   },
   setScheme: (scheme) => set({ scheme }),
   revert: () => {
-    set({ overrides: {} });
+    set({ overrides: {}, rejection: null });
     void revertTokens();
   },
 }));

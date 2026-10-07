@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTokenStore, useTokens, type Scheme } from '../ds/store';
-import { CHROME, CHROME_RADIUS } from './chrome';
+import { CHROME, CHROME_RADIUS, TONE } from './chrome';
 import { Label } from './Label';
 
 /**
@@ -65,7 +65,7 @@ const Line = ({ name, children }: { name: string; children: React.ReactNode }) =
 
 export function TokenPanel() {
   const tokens = useTokens();
-  const { setToken, scheme, setScheme, revert, overrides } = useTokenStore();
+  const { setToken, scheme, setScheme, revert, overrides, rejection } = useTokenStore();
   const dirty = Object.keys(overrides).length;
 
   return (
@@ -145,6 +145,29 @@ export function TokenPanel() {
           </Line>
         ))}
       </Section>
+
+      {/* A refused value says so here rather than the slider simply not moving.
+          Without this the panel looks broken: the control ignores you and gives
+          no reason. */}
+      {rejection ? (
+        <View
+          style={{
+            marginBottom: 12,
+            padding: CHROME_RADIUS.sm,
+            borderRadius: CHROME_RADIUS.sm,
+            borderWidth: 1,
+            borderColor: TONE.degraded,
+            backgroundColor: CHROME.panelSoft,
+            gap: 3,
+          }}>
+          <Label role="caption" color={TONE.degraded} style={{ fontWeight: '600' }}>
+            refused {rejection.path}
+          </Label>
+          <Label role="caption" color={CHROME.textMuted}>
+            {rejection.error}
+          </Label>
+        </View>
+      ) : null}
 
       {dirty > 0 ? (
         <Pressable

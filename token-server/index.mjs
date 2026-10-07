@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setPath } from './tokens.mjs';
+import { setPath, validateTokenValue } from './tokens.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOKENS = resolve(ROOT, 'mobile/src/ds/tokens.json');
@@ -58,6 +58,14 @@ const server = createServer(async (req, res) => {
       const tokens = await readTokens();
       if (!setPath(tokens, path, value)) {
         return json(res, 404, { error: `no such token: ${path}` });
+      }
+      // Checked before the write, so a bad value never reaches tokens.json. The
+      // client's copy of these rules gives immediate feedback while dragging; this
+      // one has to stand alone, because it also answers writes from anything that
+      // is not this client.
+      const verdict = validateTokenValue(path, value);
+      if (!verdict.ok) {
+        return json(res, 422, { error: verdict.error });
       }
       await writeTokens(tokens);
       console.log(`  ${path} → ${value}`);

@@ -1,0 +1,34 @@
+{
+  "_note": "Rule parameters for token value validation. Shared by the client store and the token server so the two cannot disagree. The logic lives in code on each side — this file holds ranges and patterns only, never functions. Lives under mobile/src/ because there is no metro.config.js, so Metro cannot resolve a file outside the app root.",
+
+  "color": {
+    "pattern": "^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+    "patternNote": "3, 4, 6 and 8 digit hex. The panel writes 6-digit from <input type=color>, but the file is hand-editable, so 3-digit shorthand (#fff) and alpha forms are legal. rgb() is refused: no component in this app parses it, so accepting it would write a value that renders as garbage."
+  },
+
+  "number": {
+    "space": { "min": 0, "max": 512 },
+    "radius": { "min": 0, "max": 999 },
+    "typeSize": { "min": 1, "max": 400 },
+    "typeLineHeight": { "min": 0, "max": 800 },
+    "typeLetterSpacing": { "min": -20, "max": 20 },
+    "notes": {
+      "radius": "ceiling is 999 so radius.pill is accepted rather than rejected by accident — it is the only reason pill exists.",
+      "space": "generous ceiling; space.xl is 52 and the scale is not the thing being policed.",
+      "typeSize": "1..400 covers any legible scale while still rejecting 0, which renders nothing.",
+      "typeLineHeight": "0 allowed — an author may want a deliberately tight single line. Negative is not.",
+      "typeLetterSpacing": "signed on purpose; the real scale uses -0.5 and 0.2."
+    }
+  },
+
+  "fontWeight": {
+    "pattern": "^[1-9]00$",
+    "patternNote": "A string, not a number: tokens.json holds \"800\", and type.*.weight was briefly mis-typed as numeric in the brief. Multiples of 100 from 100 to 900."
+  },
+
+  "boxShadow": {
+    "maxLength": 400,
+    "minLayers": 1,
+    "note": "Validated in code against a real box-shadow shape by validateBoxShadow in tokenValidation.ts. Parameters here because the ceiling and the layer count are policy rather than parsing."
+  }
+}
