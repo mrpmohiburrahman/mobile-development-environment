@@ -4,6 +4,7 @@ import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
 import { TokenPanel } from '../ide/TokenPanel';
 import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
+import { Drifted, useScreenDrift } from '../ide/ScreenDriftPanel';
 import { CHROME, CHROME_RADIUS } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
@@ -19,6 +20,9 @@ export default function IDE() {
   // Whether the blueprint also draws the committed baseline. Kept here rather
   // than in the panel so the chrome owns layout state and the panel owns content.
   const [comparing, setComparing] = useState(false);
+  // The ref lands on the node holding both columns, so the drift walk can pair
+  // them. Owned here because that node wraps the blueprint, not the panel.
+  const { rootRef, screens } = useScreenDrift(comparing);
 
   if (Platform.OS !== 'web') {
     return (
@@ -53,11 +57,27 @@ export default function IDE() {
           ))}
         </View>
         <ScrollView contentContainerStyle={{ padding: 12, paddingTop: 0 }}>
-          {tab === 'tokens' ? <TokenPanel /> : tab === 'state' ? <StatePanel /> : <BaselinePanel />}
+          {tab === 'tokens' ? (
+            <TokenPanel />
+          ) : tab === 'state' ? (
+            <StatePanel />
+          ) : (
+            <View style={{ gap: 18 }}>
+              {/* Two levels of the same comparison: which tokens differ, then
+                  which screens that touched. */}
+              <BaselinePanel />
+              <View style={{ gap: 6 }}>
+                <Label role="label" color={CHROME.text} style={{ letterSpacing: 1 }}>
+                  SCREENS
+                </Label>
+                <Drifted screens={screens} />
+              </View>
+            </View>
+          )}
         </ScrollView>
       </View>
 
-      <View style={{ flex: 1 }}>
+      <View ref={rootRef} style={{ flex: 1 }}>
         {/* Always rendered, so the toggle sits next to the claim it qualifies. */}
         <View style={{ paddingHorizontal: 24, paddingTop: 16, alignItems: 'flex-start' }}>
           <BaselineToggle on={comparing} onChange={setComparing} />

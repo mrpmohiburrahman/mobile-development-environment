@@ -18,6 +18,10 @@ Scope:
 - The studio's own chrome uses hardcoded `boxShadow` strings in `Blueprint.tsx`. A dragged elevation token must not disturb them — that is what ticket 04 fixes, so build on top of it.
 - Coordinate with ticket 03: the badge and this control both land in `TokenPanel.tsx`.
 
+## Follow-up: 09 and 10 landed on top of this
+
+The elevation control now feeds ticket 09's baseline column directly: a drifted `elevation.sm` is what made 6 of 7 screens flag, and the attribution names the token by matching the value pair on both sides.
+
 The gap this closes is the studio's own: it offers live controls for every token family *except* the one that is a CSS string.
 
 ## Answer

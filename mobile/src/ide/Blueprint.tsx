@@ -10,10 +10,31 @@ import { Label } from './Label';
 
 const PHONE = { width: 390, height: 820 };
 
-/** One screen, constrained to a phone aspect ratio and labelled. */
-function ScreenFrame({ index, label, children }: { index: number; label: string; children: React.ReactNode }) {
+/**
+ * One screen, constrained to a phone aspect ratio and labelled.
+ *
+ * `nativeID` is how ticket 10 pairs the two columns' nodes, and it is used rather
+ * than a `data-screen-key` prop because RNW filters unknown props off `View` —
+ * `data-*` silently never reached the DOM, and a pairing that quietly finds
+ * nothing is worse than no pairing at all. `nativeID` maps to a real DOM id.
+ * The id embeds the same stable key `screens.ts` uses, so pairing does not depend
+ * on frame order surviving a re-render.
+ */
+function ScreenFrame({
+  index,
+  label,
+  screenKey,
+  baseline = false,
+  children,
+}: {
+  index: number;
+  label: string;
+  screenKey: string;
+  baseline?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={{ gap: 8 }}>
+    <View nativeID={baseline ? `base-${screenKey}` : `screen-${screenKey}`} style={{ gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View
           style={{
@@ -112,7 +133,7 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
               transformOrigin: 'top left',
             }}>
             {screens.map(({ key, label, Component }, i) => (
-              <ScreenFrame key={key} index={i + 1} label={label}>
+              <ScreenFrame key={key} index={i + 1} label={label} screenKey={key}>
                 {/* Inside the artboard every screen is in "designing" mode, so a
                     tap renders inline instead of navigating the whole board away. */}
                 <DesigningProvider>
@@ -132,7 +153,12 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
                 <TokensFrom source={{ kind: 'pinned', tree: baseline, label: 'HEAD' }}>
                   <>
                     {screens.map(({ key, label, Component }, i) => (
-                      <ScreenFrame key={`base-${key}`} index={i + 1} label={`${label} · HEAD`}>
+                      <ScreenFrame
+                        key={`base-${key}`}
+                        index={i + 1}
+                        label={`${label} · HEAD`}
+                        screenKey={key}
+                        baseline>
                         <DesigningProvider>
                           <Component />
                         </DesigningProvider>
