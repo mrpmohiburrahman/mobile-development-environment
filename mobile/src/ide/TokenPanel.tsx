@@ -62,41 +62,80 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
  * changed, so "undo" always has an obvious referent. Per-token undo folds into
  * the session snapshot rather than being a second mechanism — see `store.ts`.
  */
+/** Width of the undo slot. Reserved whether or not a row has been edited. */
+const UNDO_W = 34;
+
+/**
+ * Fixed geometry, because a row that reflows while you drag is a row you cannot
+ * aim.
+ *
+ * The first version put the name, the value, the control and the conditional
+ * `undo` button in one `space-between` row, so three separate things moved the
+ * slider: the ` •` marker appearing on an edited row, the value going from `0`
+ * to `58` and taking more digits, and `undo` itself appearing. Dragging a token
+ * therefore nudged the control you were dragging sideways as you went.
+ *
+ * Each of those now sits in a slot whose width does not depend on its content.
+ * The name flexes and absorbs whatever is left, the value is a fixed
+ * right-aligned column, and the undo slot is always present with the button
+ * merely faded out inside it. Controls land on the same x on every row, before
+ * and after an edit.
+ */
 const Line = ({
   name,
+  value,
+  valueWidth = 34,
   edited,
   onUndo,
-  children,
+  control,
 }: {
   name: string;
+  value: string | number;
+  valueWidth?: number;
   edited?: boolean;
   onUndo?: () => void;
-  children: React.ReactNode;
+  control: React.ReactNode;
 }) => (
-  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-    <Label role="caption" color={CHROME.text} style={{ fontFamily: 'monospace' }}>
+  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+    {/* Flexes, so the ` •` marker grows inside this slot instead of pushing
+        everything after it along. */}
+    <Label
+      role="caption"
+      color={CHROME.text}
+      numberOfLines={1}
+      style={{ flex: 1, fontFamily: 'monospace' }}>
       {name}
       {edited ? ' •' : ''}
     </Label>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      {children}
-      {edited && onUndo ? (
-        <Pressable
-          onPress={onUndo}
-          accessibilityRole="button"
-          accessibilityLabel={`Undo this session's edit to ${name}`}
-          hitSlop={8}
-          style={({ pressed }) => ({
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: CHROME_RADIUS.sm,
-            opacity: pressed ? 0.6 : 1,
-          })}>
-          <Label role="caption" color={CHROME.textMuted}>
-            undo
-          </Label>
-        </Pressable>
-      ) : null}
+
+    {/* Fixed width, right-aligned: `0` and `42` occupy the same column. */}
+    <Label
+      role="caption"
+      color={CHROME.textMuted}
+      numberOfLines={1}
+      style={{ width: valueWidth, textAlign: 'right', fontFamily: 'monospace' }}>
+      {value}
+    </Label>
+
+    {control}
+
+    {/* Always present, never collapsed. The button fades rather than unmounts,
+        and is not pressable while invisible. */}
+    <View style={{ width: UNDO_W, alignItems: 'flex-end' }}>
+      <Pressable
+        onPress={onUndo}
+        disabled={!edited || !onUndo}
+        accessibilityRole="button"
+        accessibilityLabel={`Undo this session's edit to ${name}`}
+        accessibilityState={{ disabled: !edited || !onUndo }}
+        hitSlop={8}
+        style={({ pressed }) => ({
+          opacity: edited && onUndo ? (pressed ? 0.6 : 1) : 0,
+        })}>
+        <Label role="caption" color={CHROME.textMuted}>
+          undo
+        </Label>
+      </Pressable>
     </View>
   </View>
 );
@@ -152,13 +191,12 @@ export function TokenPanel() {
           <Line
             key={name}
             name={name}
+            valueWidth={62}
+            value={value}
             edited={edited(`color.${scheme}.${name}`)}
-            onUndo={() => revertToken(`color.${scheme}.${name}`)}>
-            <Label role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }}>
-              {value}
-            </Label>
-            <ColorInput value={value} onChange={(v) => setToken(`color.${scheme}.${name}`, v)} />
-          </Line>
+            onUndo={() => revertToken(`color.${scheme}.${name}`)}
+            control={<ColorInput value={value} onChange={(v) => setToken(`color.${scheme}.${name}`, v)} />}
+          />
         ))}
       </Section>
 
@@ -167,13 +205,11 @@ export function TokenPanel() {
           <Line
             key={name}
             name={name}
+            value={value}
             edited={edited(`space.${name}`)}
-            onUndo={() => revertToken(`space.${name}`)}>
-            <Label role="caption" color={CHROME.textMuted}>
-              {value}
-            </Label>
-            <RangeInput value={value} min={0} max={64} onChange={(v) => setToken(`space.${name}`, v)} />
-          </Line>
+            onUndo={() => revertToken(`space.${name}`)}
+            control={<RangeInput value={value} min={0} max={64} onChange={(v) => setToken(`space.${name}`, v)} />}
+          />
         ))}
       </Section>
 
@@ -182,41 +218,53 @@ export function TokenPanel() {
           <Line
             key={name}
             name={name}
+            value={value}
             edited={edited(`radius.${name}`)}
-            onUndo={() => revertToken(`radius.${name}`)}>
-            <Label role="caption" color={CHROME.textMuted}>
-              {value}
-            </Label>
-            <RangeInput
-              value={Math.min(value, 60)}
-              min={0}
-              max={60}
-              onChange={(v) => setToken(`radius.${name}`, v)}
-            />
-          </Line>
+            onUndo={() => revertToken(`radius.${name}`)}
+            control={
+              <RangeInput
+                value={Math.min(value, 60)}
+                min={0}
+                max={60}
+                onChange={(v) => setToken(`radius.${name}`, v)}
+              />
+            }
+          />
         ))}
       </Section>
 
       <Section title="Elevation">
         {Object.entries(tokens.elevation).map(([name, value]) => (
           <View key={name} style={{ gap: 4, marginBottom: 6 }}>
+            {/* Same fixed-geometry rule as `Line`: the name flexes and the undo
+                slot is always present, so the marker and the button cannot move
+                anything. Here the row is above a full-width field rather than
+                beside a slider, so the slot is anchored right. */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Label role="caption" color={CHROME.text} style={{ fontFamily: 'monospace' }}>
+              <Label
+                role="caption"
+                color={CHROME.text}
+                numberOfLines={1}
+                style={{ flex: 1, fontFamily: 'monospace' }}>
                 {name}
                 {edited(`elevation.${name}`) ? ' •' : ''}
               </Label>
-              {edited(`elevation.${name}`) ? (
+              <View style={{ width: UNDO_W, alignItems: 'flex-end' }}>
                 <Pressable
                   onPress={() => revertToken(`elevation.${name}`)}
+                  disabled={!edited(`elevation.${name}`)}
                   accessibilityRole="button"
                   accessibilityLabel={`Undo this session's edit to ${name}`}
+                  accessibilityState={{ disabled: !edited(`elevation.${name}`) }}
                   hitSlop={8}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                  style={({ pressed }) => ({
+                    opacity: edited(`elevation.${name}`) ? (pressed ? 0.6 : 1) : 0,
+                  })}>
                   <Label role="caption" color={CHROME.textMuted}>
                     undo
                   </Label>
                 </Pressable>
-              ) : null}
+              </View>
             </View>
             <ShadowInput value={value} onCommit={(next) => setToken(`elevation.${name}`, next)} />
           </View>
@@ -232,22 +280,22 @@ export function TokenPanel() {
           <Line
             key={name}
             name={name}
+            value={spec.size}
             edited={edited(`type.${name}.size`)}
-            onUndo={() => revertToken(`type.${name}.size`)}>
-            <Label role="caption" color={CHROME.textMuted}>
-              {spec.size}
-            </Label>
-            <RangeInput
-              value={spec.size}
-              min={9}
-              max={48}
-              onChange={(v) => {
-                setToken(`type.${name}.size`, v);
-                // Line height tracks size, or the scale falls apart as you drag.
-                setToken(`type.${name}.lineHeight`, Math.round(v * 1.25));
-              }}
-            />
-          </Line>
+            onUndo={() => revertToken(`type.${name}.size`)}
+            control={
+              <RangeInput
+                value={spec.size}
+                min={9}
+                max={48}
+                onChange={(v) => {
+                  setToken(`type.${name}.size`, v);
+                  // Line height tracks size, or the scale falls apart as you drag.
+                  setToken(`type.${name}.lineHeight`, Math.round(v * 1.25));
+                }}
+              />
+            }
+          />
         ))}
       </Section>
 
