@@ -11,10 +11,37 @@ const SERVER = process.env.EXPO_PUBLIC_TOKEN_SERVER ?? 'http://localhost:3001';
 export type TokenValue = string | number;
 
 let reachable: boolean | null = null;
+const listeners = new Set<() => void>();
 
 /** Whether the token server answered last time we tried. null = not tried yet. */
 export function serverIsReachable() {
   return reachable;
+}
+
+/**
+ * Subscribe to changes in `serverIsReachable`. Returns an unsubscribe function.
+ *
+ * Without this the flag is a plain module-level `let` and reading it in a
+ * component never re-renders: the badge would show "not checked yet" forever and
+ * only ever repaint if something else happened to re-render the tree. That is the
+ * whole defect this subscription removes, so it is deliberate rather than
+ * incidental — see `ide/DiskBadge.tsx`, which pairs it with `useSyncExternalStore`.
+ *
+ * `reachable` stays a primitive on purpose. `useSyncExternalStore` re-reads its
+ * snapshot on every render and requires the value to be `Object.is`-stable while
+ * nothing has changed; a boolean or null always is, so there is nothing to memoise.
+ */
+export function subscribeServerStatus(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Record an answer and wake the badge. */
+function recordReachable(next: boolean) {
+  reachable = next;
+  for (const listener of listeners) listener();
 }
 
 export async function pushToken(path: string, value: TokenValue): Promise<boolean> {
@@ -24,10 +51,10 @@ export async function pushToken(path: string, value: TokenValue): Promise<boolea
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, value }),
     });
-    reachable = res.ok;
+    recordReachable(res.ok);
     return res.ok;
   } catch {
-    reachable = false;
+    recordReachable(false);
     return false;
   }
 }
@@ -35,10 +62,10 @@ export async function pushToken(path: string, value: TokenValue): Promise<boolea
 export async function revertTokens(): Promise<boolean> {
   try {
     const res = await fetch(`${SERVER}/revert`, { method: 'POST' });
-    reachable = res.ok;
+    recordReachable(res.ok);
     return res.ok;
   } catch {
-    reachable = false;
+    recordReachable(false);
     return false;
   }
 }

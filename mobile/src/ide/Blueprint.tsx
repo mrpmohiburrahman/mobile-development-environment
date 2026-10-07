@@ -4,16 +4,10 @@ import { useTheme } from '../ds/store';
 import { DesigningProvider } from './designing';
 import { screens } from './screens';
 import { Text } from '../ui';
+import { CHROME } from './chrome';
+import { DiskBadge } from './DiskBadge';
 
 const PHONE = { width: 390, height: 820 };
-const CHROME = {
-  bg: '#16120F',
-  panel: '#211C18',
-  panelSoft: '#2B251F',
-  border: '#2A231E',
-  text: '#F4EFE9',
-  textMuted: '#9C928A',
-};
 
 /** One screen, constrained to a phone aspect ratio and labelled. */
 function ScreenFrame({ index, label, children }: { index: number; label: string; children: React.ReactNode }) {
@@ -79,7 +73,7 @@ export function Blueprint() {
 
   return (
     <View ref={workspaceRef} style={{ flex: 1, backgroundColor: CHROME.bg }}>
-      <View style={{ paddingHorizontal: 24, paddingTop: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ paddingHorizontal: 24, paddingTop: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
         <Text role="label" style={{ color: CHROME.text, letterSpacing: 1.2 }}>
           BLUEPRINT
         </Text>
@@ -87,6 +81,11 @@ export function Blueprint() {
         <Text role="caption" style={{ color: CHROME.textMuted }}>
           {screens.length} screens · live from the same components that ship
         </Text>
+        <View style={{ flex: 1 }} />
+        {/* Where an edit went. Lives in the header because that row is the one
+            piece of chrome that outlives every ticket in this map, and because
+            it sits next to the claim it qualifies. */}
+        <DiskBadge />
       </View>
 
       <ScrollView horizontal contentContainerStyle={{ padding: 24, paddingBottom: 24 }}>
