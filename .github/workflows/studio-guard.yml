@@ -1,0 +1,45 @@
+name: studio-guard
+
+# The studio's credibility depends on the app tree staying byte-identical while
+# the studio grows around it. The studio renders real screens to make its claims
+# demonstrable; if it can edit those screens, the rendering proves nothing.
+#
+# scripts/guard.sh holds the logic and is covered by test/guard.test.ts. This
+# workflow only decides which range to check and surfaces the result.
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the guard is a three-dot range and needs the merge
+          # base, which a shallow clone does not have. Without this the diff
+          # either errors or silently compares the wrong two trees.
+          fetch-depth: 0
+
+      - name: App screens and shared components are byte-identical
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range="origin/${{ github.base_ref }}...HEAD"
+          else
+            # First push to a new branch has no meaningful `before`; fall back
+            # to the default branch rather than diffing against the empty tree.
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              range="origin/HEAD...HEAD"
+            else
+              range="$before...HEAD"
+            fi
+          fi
+          echo "Guarding: $range"
+          bash scripts/guard.sh "$range"
+
+      - name: Test suite
+        run: npm test
