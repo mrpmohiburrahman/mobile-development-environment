@@ -3,6 +3,7 @@
   "private": true,
   "description": "A design-token studio that lives inside an Expo app and writes its edits back to the codebase",
   "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
     "tokens": "node token-server/index.mjs",
     "web": "cd mobile && npx expo start --web",
     "ios": "cd mobile && npx expo start --ios"

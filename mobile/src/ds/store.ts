@@ -2,6 +2,9 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import base from './tokens.json';
 import { pushToken, revertTokens, type TokenValue } from './client';
+import { applyOverrides } from './applyOverrides';
+
+export { applyOverrides, setPath } from './applyOverrides';
 
 export type Tokens = typeof base;
 export type Scheme = keyof Tokens['color'];
@@ -37,25 +40,6 @@ export const useTokenStore = create<State>((set) => ({
     void revertTokens();
   },
 }));
-
-/** Set a dotted path on a plain object, mutating it. */
-function setPath(obj: any, path: string, value: TokenValue) {
-  const keys = path.split('.');
-  const last = keys.pop()!;
-  let node = obj;
-  for (const k of keys) {
-    if (typeof node[k] !== 'object' || node[k] === null) return;
-    node = node[k];
-  }
-  node[last] = value;
-}
-
-export function applyOverrides(tokens: Tokens, overrides: Record<string, TokenValue>): Tokens {
-  if (Object.keys(overrides).length === 0) return tokens;
-  const next = structuredClone(tokens);
-  for (const [path, value] of Object.entries(overrides)) setPath(next, path, value);
-  return next;
-}
 
 /** The whole token tree, with edits applied. */
 export function useTokens(): Tokens {

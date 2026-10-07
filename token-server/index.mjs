@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setPath } from './tokens.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOKENS = resolve(ROOT, 'mobile/src/ds/tokens.json');
@@ -21,19 +22,7 @@ const readTokens = async () => JSON.parse(await readFile(TOKENS, 'utf8'));
 // tool exists to make readable.
 const writeTokens = (tokens) => writeFile(TOKENS, JSON.stringify(tokens, null, 2) + '\n');
 
-/** Set a dotted path, e.g. "color.light.accent". Refuses to create new keys. */
-function setPath(obj, path, value) {
-  const keys = path.split('.');
-  const last = keys.pop();
-  let node = obj;
-  for (const k of keys) {
-    if (!Object.hasOwn(node, k) || typeof node[k] !== 'object') return false;
-    node = node[k];
-  }
-  if (!Object.hasOwn(node, last)) return false;
-  node[last] = value;
-  return true;
-}
+
 
 const json = (res, code, body) => {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
