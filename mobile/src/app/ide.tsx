@@ -3,7 +3,8 @@ import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
 import { TokenPanel } from '../ide/TokenPanel';
-import { Text } from '../ui';
+import { CHROME, CHROME_RADIUS } from '../ide/chrome';
+import { Label } from '../ide/Label';
 
 type Tab = 'tokens' | 'state';
 
@@ -18,17 +19,17 @@ export default function IDE() {
   if (Platform.OS !== 'web') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 }}>
-        <Text role="title">Studio is web-only</Text>
-        <Text role="body" color="textMuted">
+        <Label role="title">Studio is web-only</Label>
+        <Label role="body" color={CHROME.textMuted}>
           Open this route in a browser. Token edits made there show up here live.
-        </Text>
+        </Label>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#13100D' }}>
-      <View style={{ width: 280, borderRightWidth: 1, borderRightColor: '#2A231E' }}>
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: CHROME.bg }}>
+      <View style={{ width: 280, borderRightWidth: 1, borderRightColor: CHROME.border }}>
         <View style={{ flexDirection: 'row', gap: 6, padding: 12 }}>
           {(['tokens', 'state'] as Tab[]).map((name) => (
             <Pressable
@@ -37,13 +38,13 @@ export default function IDE() {
               style={({ pressed }) => ({
                 paddingVertical: 5,
                 paddingHorizontal: 12,
-                borderRadius: 999,
-                backgroundColor: tab === name ? '#D9481E' : '#211C18',
+                borderRadius: CHROME_RADIUS.pill,
+                backgroundColor: tab === name ? '#D9481E' : CHROME.panel,
                 opacity: pressed ? 0.7 : 1,
               })}>
-              <Text role="caption" style={{ color: tab === name ? '#fff' : '#9C928A' }}>
+              <Label role="caption" color={tab === name ? '#fff' : CHROME.textMuted}>
                 {name}
-              </Text>
+              </Label>
             </Pressable>
           ))}
         </View>

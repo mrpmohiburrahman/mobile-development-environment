@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTokenStore, useTokens, type Scheme } from '../ds/store';
-import { Text } from '../ui';
+import { CHROME, CHROME_RADIUS } from './chrome';
+import { Label } from './Label';
 
 /**
  * Editors are raw DOM inputs. The IDE only ever runs on web, and the platform
@@ -18,7 +19,7 @@ const ColorInput = ({ value, onChange }: { value: string; onChange: (v: string) 
       height: 26,
       padding: 0,
       border: '1px solid #3A3129',
-      borderRadius: 8,
+      borderRadius: CHROME_RADIUS.sm,
       background: 'none',
       cursor: 'pointer',
     },
@@ -37,27 +38,27 @@ const RangeInput = ({
 }) =>
   createElement('input', {
     type: 'range',
+    value,
     min,
     max,
-    value,
     onChange: (e: any) => onChange(Number(e.target.value)),
     style: { width: 96, accentColor: '#FF7A4C', cursor: 'pointer' },
   });
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={{ gap: 6, marginBottom: 18 }}>
-    <Text role="caption" style={{ color: '#9C928A', letterSpacing: 1, fontWeight: 600 }}>
+    <Label role="caption" color={CHROME.textMuted} style={{ letterSpacing: 1, fontWeight: '600' }}>
       {title.toUpperCase()}
-    </Text>
+    </Label>
     {children}
   </View>
 );
 
 const Line = ({ name, children }: { name: string; children: React.ReactNode }) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-    <Text role="caption" style={{ color: '#EDE7E0', fontFamily: 'monospace' }}>
+    <Label role="caption" color={CHROME.text} style={{ fontFamily: 'monospace' }}>
       {name}
-    </Text>
+    </Label>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>{children}</View>
   </View>
 );
@@ -77,12 +78,12 @@ export function TokenPanel() {
             style={{
               paddingVertical: 4,
               paddingHorizontal: 10,
-              borderRadius: 999,
-              backgroundColor: scheme === s ? '#D9481E' : '#2B251F',
+              borderRadius: CHROME_RADIUS.pill,
+              backgroundColor: scheme === s ? '#D9481E' : CHROME.panelSoft,
             }}>
-            <Text role="caption" style={{ color: scheme === s ? '#fff' : '#9C928A' }}>
+            <Label role="caption" color={scheme === s ? '#fff' : CHROME.textMuted}>
               {s}
-            </Text>
+            </Label>
           </Pressable>
         ))}
       </View>
@@ -90,9 +91,9 @@ export function TokenPanel() {
       <Section title={`Colour · ${scheme}`}>
         {Object.entries(tokens.color[scheme]).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#8A8178', fontFamily: 'monospace' }}>
+            <Label role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }}>
               {value}
-            </Text>
+            </Label>
             <ColorInput value={value} onChange={(v) => setToken(`color.${scheme}.${name}`, v)} />
           </Line>
         ))}
@@ -101,9 +102,9 @@ export function TokenPanel() {
       <Section title="Spacing">
         {Object.entries(tokens.space).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#8A8178' }}>
+            <Label role="caption" color={CHROME.textMuted}>
               {value}
-            </Text>
+            </Label>
             <RangeInput value={value} min={0} max={64} onChange={(v) => setToken(`space.${name}`, v)} />
           </Line>
         ))}
@@ -112,9 +113,9 @@ export function TokenPanel() {
       <Section title="Radius">
         {Object.entries(tokens.radius).map(([name, value]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#8A8178' }}>
+            <Label role="caption" color={CHROME.textMuted}>
               {value}
-            </Text>
+            </Label>
             <RangeInput
               value={Math.min(value, 60)}
               min={0}
@@ -128,9 +129,9 @@ export function TokenPanel() {
       <Section title="Type scale">
         {Object.entries(tokens.type).map(([name, spec]) => (
           <Line key={name} name={name}>
-            <Text role="caption" style={{ color: '#8A8178' }}>
+            <Label role="caption" color={CHROME.textMuted}>
               {spec.size}
-            </Text>
+            </Label>
             <RangeInput
               value={spec.size}
               min={9}
@@ -148,10 +149,10 @@ export function TokenPanel() {
       {dirty > 0 ? (
         <Pressable
           onPress={revert}
-          style={{ paddingVertical: 8, borderRadius: 8, backgroundColor: '#2B251F', alignItems: 'center' }}>
-          <Text role="caption" style={{ color: '#EDE7E0' }}>
+          style={{ paddingVertical: 8, borderRadius: CHROME_RADIUS.md, backgroundColor: CHROME.panelSoft, alignItems: 'center' }}>
+          <Label role="caption" color={CHROME.text}>
             Revert {dirty} edit{dirty === 1 ? '' : 's'}
-          </Text>
+          </Label>
         </Pressable>
       ) : null}
     </View>

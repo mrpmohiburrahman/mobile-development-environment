@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useTheme } from '../ds/store';
 import { DesigningProvider } from './designing';
 import { screens } from './screens';
-import { Text } from '../ui';
-import { CHROME } from './chrome';
+import { CHROME, CHROME_RADIUS } from './chrome';
 import { DiskBadge } from './DiskBadge';
+import { Label } from './Label';
 
 const PHONE = { width: 390, height: 820 };
 
@@ -23,13 +22,13 @@ function ScreenFrame({ index, label, children }: { index: number; label: string;
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-          <Text role="caption" style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+          <Label role="caption" color="#fff" style={{ fontSize: 11, fontWeight: '800' }}>
             {index}
-          </Text>
+          </Label>
         </View>
-        <Text role="label" style={{ color: CHROME.textMuted }}>
+        <Label role="label" color={CHROME.textMuted}>
           {label}
-        </Text>
+        </Label>
         <View style={{ flex: 1, height: 1, backgroundColor: CHROME.border }} />
       </View>
       <View
@@ -50,7 +49,6 @@ function ScreenFrame({ index, label, children }: { index: number; label: string;
 }
 
 export function Blueprint() {
-  const t = useTheme();
   const [scale, setScale] = useState(0.5);
   const workspaceRef = useRef<View>(null);
 
@@ -74,13 +72,13 @@ export function Blueprint() {
   return (
     <View ref={workspaceRef} style={{ flex: 1, backgroundColor: CHROME.bg }}>
       <View style={{ paddingHorizontal: 24, paddingTop: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-        <Text role="label" style={{ color: CHROME.text, letterSpacing: 1.2 }}>
+        <Label role="label" color={CHROME.text} style={{ letterSpacing: 1.2 }}>
           BLUEPRINT
-        </Text>
+        </Label>
         <View style={{ height: 16, width: 1, backgroundColor: CHROME.border }} />
-        <Text role="caption" style={{ color: CHROME.textMuted }}>
+        <Label role="caption" color={CHROME.textMuted}>
           {screens.length} screens · live from the same components that ship
-        </Text>
+        </Label>
         <View style={{ flex: 1 }} />
         {/* Where an edit went. Lives in the header because that row is the one
             piece of chrome that outlives every ticket in this map, and because
@@ -117,13 +115,13 @@ export function Blueprint() {
           bottom: 16,
           right: 16,
           backgroundColor: CHROME.panel,
-          borderRadius: t.radius.pill,
+          borderRadius: CHROME_RADIUS.pill,
           paddingVertical: 6,
           paddingHorizontal: 12,
         }}>
-        <Text role="caption" style={{ color: CHROME.textMuted }}>
+        <Label role="caption" color={CHROME.textMuted}>
           {Math.round(scale * 100)}% · ctrl+scroll to zoom
-        </Text>
+        </Label>
       </View>
     </View>
   );
