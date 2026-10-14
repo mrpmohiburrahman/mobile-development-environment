@@ -11,7 +11,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -63,7 +65,40 @@ test('the workflow handles a first push, where `before` is all zeros', () => {
   // range against nothing; the fallback keeps the check meaningful instead of
   // either erroring or silently passing.
   assert.match(workflow, /0000000000000000000000000000000000000000/);
-  assert.match(workflow, /origin\/HEAD\.\.\.HEAD/);
+  assert.match(
+    workflow,
+    /origin\/\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}\.\.\.HEAD/,
+  );
+});
+
+test('the workflow never falls back to origin/HEAD', () => {
+  // This one was live and wrong for a full day. `origin/HEAD` is a local
+  // symbolic ref that only a real `git clone` creates. `actions/checkout` fetches
+  // the history but never runs `git remote set-head origin -a`, so the ref does
+  // not exist there, and the first push of any new branch failed with
+  // "fatal: bad revision 'origin/HEAD...HEAD'".
+  //
+  // The guard was therefore unrunnable on exactly the push that creates a
+  // branch. The old test asserted the fallback *existed*; it did not assert the
+  // range resolved. This asserts the shape that resolves.
+  const fallback = workflow.slice(workflow.indexOf('before='));
+  assert.doesNotMatch(fallback, /origin\/HEAD/, 'the first-push fallback must name the default branch');
+
+  // And prove the ref really is absent in that environment, rather than trusting
+  // the reasoning above.
+  const repo = mkdtempSync(join(tmpdir(), 'guard-head-'));
+  try {
+    execSync('git init -q && git config user.email t@t && git config user.name t', { cwd: repo });
+    // A clone sets origin/HEAD. This repo has no remote at all, which is the
+    // closest local stand-in for a checkout that never ran `remote set-head`.
+    const ref = execSync('git rev-parse --verify origin/HEAD', { cwd: repo, stdio: 'pipe' });
+    assert.fail(`expected origin/HEAD to be unresolvable, got: ${ref.toString()}`);
+  } catch (err) {
+    // git exits non-zero for an unknown revision. That is the point.
+    assert.notEqual((err as { status?: number }).status, 0);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('the guard triggers on pull requests and pushes, like the attribution check', () => {

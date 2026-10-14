@@ -31,9 +31,16 @@ jobs:
           else
             # First push to a new branch has no meaningful `before`; fall back
             # to the default branch rather than diffing against the empty tree.
+            #
+            # The default branch *by name*, never `origin/HEAD`. That ref only
+            # exists after a real `git clone` sets it. `actions/checkout` fetches
+            # the history but never runs `git remote set-head`, so on the first
+            # push of any new branch `origin/HEAD...HEAD` failed with
+            # "bad revision" and took the guard down. The guard was unrunnable on
+            # exactly the push that creates a branch.
             before="${{ github.event.before }}"
             if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
-              range="origin/HEAD...HEAD"
+              range="origin/${{ github.event.repository.default_branch }}...HEAD"
             else
               range="$before...HEAD"
             fi
