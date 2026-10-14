@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useRouter } from 'expo-router';
+import { recordRoute } from './spineStore';
 
 /**
  * Screens rendered inside the blueprint need to behave slightly differently:
@@ -12,20 +13,68 @@ import { useRouter } from 'expo-router';
  */
 const DesigningContext = createContext(false);
 
-export const DesigningProvider = ({ children }: { children: ReactNode }) => (
-  <DesigningContext.Provider value={true}>{children}</DesigningContext.Provider>
+/**
+ * Which frame a screen is being rendered as.
+ *
+ * A **separate** context, deliberately. `useDesigning()` is consumed by
+ * `mobile/src/ui/index.tsx`, which is byte-identical and uses the result as a
+ * boolean — `if (designing) return`. Returning an object from the same hook would
+ * make every tab tap and back press look "designing" in the real app, so the tab
+ * bar would never navigate and the guard would have failed silently rather than
+ * loudly.
+ *
+ * The frame's identity is what lets a route change say where it came from, and a
+ * press say which frame it landed in.
+ */
+export type BoardColumn = 'current' | 'comparison';
+export type Frame = { screenKey: string | null; column: BoardColumn };
+
+const FrameContext = createContext<Frame>({ screenKey: null, column: 'current' });
+
+export const DesigningProvider = ({
+  children,
+  screenKey = null,
+  column = 'current',
+}: {
+  children: ReactNode;
+  screenKey?: string | null;
+  column?: BoardColumn;
+}) => (
+  <FrameContext.Provider value={{ screenKey, column }}>
+    <DesigningContext.Provider value={true}>{children}</DesigningContext.Provider>
+  </FrameContext.Provider>
 );
 
 export const useDesigning = () => useContext(DesigningContext);
 
+/** Which frame the calling screen is drawn as, when it is on the blueprint. */
+export const useFrame = () => useContext(FrameContext);
+
 /**
- * Navigation that no-ops inside the blueprint. Screens call this instead of
- * `useRouter` so they work unchanged in both contexts.
+ * The navigation seam: the one place every route change passes through.
+ *
+ * It **records and returns**, and under the designing context it still does not
+ * navigate. Both halves are load-bearing.
+ *
+ * Recording is what makes the route list possible at all. `useNavigate` is the
+ * only function in the app that pushes, and every screen calls it instead of
+ * `useRouter`, so one function sees every edge. A screen added later that reaches
+ * the router directly would cost the list an edge with nothing reporting it —
+ * hence the static test in `test/mechanisms.test.ts` that asserts no other call
+ * site pushes.
+ *
+ * Not navigating is the older, more important half. A regression there loses the
+ * reader their board, silently and irrecoverably, which is the worst failure this
+ * work could produce: the studio would appear to work perfectly while showing a
+ * different app. The guard and its test are both here rather than in review
+ * because this is a one-line change with a catastrophic failure mode.
  */
 export function useNavigate() {
   const designing = useDesigning();
+  const frame = useFrame();
   const router = useRouter();
   return (href: string) => {
+    recordRoute({ from: frame.screenKey, to: href, column: frame.column });
     if (designing) return;
     router.push(href as never);
   };

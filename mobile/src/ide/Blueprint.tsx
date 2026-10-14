@@ -3,10 +3,25 @@ import { ScrollView, View } from 'react-native';
 import { DesigningProvider } from './designing';
 import { screens } from './screens';
 import { TokensFrom } from '../ds/store';
-import { CHROME, CHROME_RADIUS } from './chrome';
+import { CHROME, CHROME_RADIUS, TONE } from './chrome';
 import { useCommittedTokens } from './BaselinePanel';
 import { DiskBadge } from './DiskBadge';
 import { Label } from './Label';
+import { clipTarget, describePresses } from './presses';
+import { tallyPresses } from './spine';
+import { recordPress, useSpine } from './spineStore';
+import { RenderVerdictBadge } from './RenderVerdict';
+
+/**
+ * How a press listener finds the frame it landed in.
+ *
+ * The frame's own DOM id — `#screen-<key>` or `#base-<key>` — and never a custom
+ * `data-*` attribute. React Native Web filters unknown props off `View`, so a
+ * `data-screen-key` silently never reaches the document; a pairing walk that finds
+ * zero frames while the panel says the comparison "has not run yet" is the exact
+ * failure this repo has already shipped once.
+ */
+const FRAME_SELECTOR = '[id^="screen-"], [id^="base-"]';
 
 const PHONE = { width: 390, height: 820 };
 
@@ -72,6 +87,30 @@ function ScreenFrame({
 }
 
 /**
+ * How many of the board's controls do something.
+ *
+ * The count lives in the chrome so nobody has to click around the board with a
+ * tally to find out. The wording is the important half: "inert **in the studio**"
+ * rather than broken, and the measurement is the label while the caveat is the
+ * detail, so a long caveat cannot be mistaken for a long accusation.
+ */
+function PressBadge() {
+  const spine = useSpine();
+  const report = describePresses(tallyPresses(spine.entries));
+
+  return (
+    <View style={{ gap: 2, maxWidth: 560 }}>
+      <Label role="caption" color={TONE[report.tone]} style={{ fontWeight: '600' }} numberOfLines={1}>
+        {report.label}
+      </Label>
+      <Label role="caption" color={CHROME.textMuted} numberOfLines={2}>
+        {report.detail}
+      </Label>
+    </View>
+  );
+}
+
+/**
  * The board of screens, rendered from the real components.
  *
  * `comparing` adds a second column drawn from the tokens at `HEAD`, via
@@ -105,6 +144,50 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
     return () => node.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
+  /**
+   * Every press on the board, recorded — **including presses the component
+   * swallows**.
+   *
+   * Capture phase, and attached to the same workspace node the zoom listener
+   * already attaches a wheel handler to, because capture runs before the
+   * component's own handler. That is the only way to see a press the app decides
+   * to ignore: the tab bar's four items, the avatar, the stats card. Without it
+   * those presses leave no trace at all, and the board's silence reads as "nothing
+   * is wrong" rather than "half these controls do nothing here".
+   *
+   * A press outside every frame is not counted. Empty workspace space is not a
+   * control, and counting it would inflate the denominator with the one thing the
+   * reader definitely did not mean to press.
+   */
+  const labels = useRef(new Map(screens.map((s) => [s.key, s.label])));
+  useEffect(() => {
+    const node = workspaceRef.current as unknown as HTMLElement | null;
+    if (!node?.addEventListener) return;
+
+    const handle = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (!target?.closest) return;
+      const frame = target.closest(FRAME_SELECTOR);
+      // `contains` rather than truthiness: a nested frame cannot exist today, but a
+      // listener attached to the wrong node would otherwise report it.
+      if (!frame || !node.contains(frame)) return;
+
+      const id = frame.id;
+      const comparison = id.startsWith('base-');
+      const key = comparison ? id.slice('base-'.length) : id.slice('screen-'.length);
+
+      recordPress({
+        frame: key,
+        column: comparison ? 'comparison' : 'current',
+        label: labels.current.get(key) ?? key,
+        target: clipTarget(target.textContent),
+      });
+    };
+
+    node.addEventListener('click', handle, true);
+    return () => node.removeEventListener('click', handle, true);
+  }, []);
+
   return (
     <View ref={workspaceRef} style={{ flex: 1, backgroundColor: CHROME.bg }}>
       <View style={{ paddingHorizontal: 24, paddingTop: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
@@ -122,6 +205,13 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
         <DiskBadge />
       </View>
 
+      {/* Two things the board can say about itself, both measured rather than
+          assumed, both placed next to the claim they qualify. */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 10, gap: 8 }}>
+        <PressBadge />
+        <RenderVerdictBadge host={workspaceRef} />
+      </View>
+
       <ScrollView horizontal contentContainerStyle={{ padding: 24, paddingBottom: 24 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View
@@ -135,8 +225,10 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
             {screens.map(({ key, label, Component }, i) => (
               <ScreenFrame key={key} index={i + 1} label={label} screenKey={key}>
                 {/* Inside the artboard every screen is in "designing" mode, so a
-                    tap renders inline instead of navigating the whole board away. */}
-                <DesigningProvider>
+                    tap renders inline instead of navigating the whole board away.
+                    The frame's key travels with it, so a route change and a press
+                    can say where they happened. */}
+                <DesigningProvider screenKey={key} column="current">
                   <Component />
                 </DesigningProvider>
               </ScreenFrame>
@@ -159,7 +251,10 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
                         label={`${label} · HEAD`}
                         screenKey={key}
                         baseline>
-                        <DesigningProvider>
+                        {/* The comparison column shares the same seam and the same
+                            log. Marked as its own column, so a press there is never
+                            read as evidence about the current one. */}
+                        <DesigningProvider screenKey={key} column="comparison">
                           <Component />
                         </DesigningProvider>
                       </ScreenFrame>
