@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
+import { RoutePanel } from '../ide/RoutePanel';
 import { TokenPanel } from '../ide/TokenPanel';
 import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
 import { Drifted, useScreenDrift } from '../ide/ScreenDriftPanel';
+import { attachSpine } from '../ide/spineStore';
 import { CHROME, CHROME_RADIUS } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
-type Tab = 'tokens' | 'state' | 'baseline';
+type Tab = 'tokens' | 'state' | 'routes' | 'baseline';
 
 /**
  * The studio. This is a route in the mobile app, not a separate project — which
@@ -21,8 +23,16 @@ export default function IDE() {
   // than in the panel so the chrome owns layout state and the panel owns content.
   const [comparing, setComparing] = useState(false);
   // The ref lands on the node holding both columns, so the drift walk can pair
-  // them. Owned here because that node wraps the blueprint, not the panel.
+  // them and the route panel can count the back controls it finds there. Owned
+  // here because that node wraps the blueprint, not the panel.
   const { rootRef, screens } = useScreenDrift(comparing);
+
+  // The change log attaches here rather than at module scope, so "nothing has
+  // happened yet" and "nothing is listening" stay two different sentences. Both
+  // stores: the scheme lives on the other one and repaints every frame on the
+  // board, which is the loudest interaction in the studio and used to be the one
+  // the log said nothing about.
+  useEffect(() => attachSpine(), []);
 
   if (Platform.OS !== 'web') {
     return (
@@ -39,7 +49,7 @@ export default function IDE() {
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: CHROME.bg }}>
       <View style={{ width: 300, borderRightWidth: 1, borderRightColor: CHROME.border }}>
         <View style={{ flexDirection: 'row', gap: 6, padding: 12 }}>
-          {(['tokens', 'state', 'baseline'] as Tab[]).map((name) => (
+          {(['tokens', 'state', 'routes', 'baseline'] as Tab[]).map((name) => (
             <Pressable
               key={name}
               onPress={() => setTab(name)}
@@ -61,6 +71,8 @@ export default function IDE() {
             <TokenPanel />
           ) : tab === 'state' ? (
             <StatePanel />
+          ) : tab === 'routes' ? (
+            <RoutePanel host={rootRef} />
           ) : (
             <View style={{ gap: 18 }}>
               {/* Two levels of the same comparison: which tokens differ, then
