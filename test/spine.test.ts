@@ -329,8 +329,40 @@ test('the press tally counts every verdict and never double-counts', () => {
   );
 
   const tally = tallyPresses(state.entries);
-  assert.deepEqual(tally, { presses: 2, live: 1, inert: 1, unattributed: 0, uninstrumented: 0 });
-  assert.equal(tally.live + tally.inert + tally.unattributed + tally.uninstrumented, tally.presses);
+  assert.deepEqual(tally, { presses: 2, live: 1, inert: 1, unattributed: 0, unlocated: 0 });
+  assert.equal(tally.live + tally.inert + tally.unattributed + tally.unlocated, tally.presses);
+  // The accumulated tally agrees with the rows while the ring still holds them all.
+  // They diverge only at eviction, which the next test drives.
+  assert.deepEqual(state.tally, tally);
+});
+
+test('a press without a verdict fails instead of counting as unlocated', () => {
+  const state = run(
+    { kind: 'press', frame: 'index', column: 'current', label: 'A', target: 'A' },
+    { kind: 'flush' },
+  );
+  assert.throws(() => tallyPresses([{ ...state.entries[0], verdict: null }]), /Invalid press verdict/);
+});
+
+test('an unknown press verdict fails instead of counting as unlocated', () => {
+  const entry = JSON.parse('{"seq":1,"press":{"frame":"index"},"route":null,"changes":[],"verdict":"future"}');
+  assert.throws(() => tallyPresses([entry]), /Invalid press verdict: future/);
+});
+
+test('the tally keeps all four verdicts distinct and ignores rows without presses', () => {
+  const state = run(
+    { kind: 'press', frame: 'index', column: 'current', label: 'A', target: 'A' },
+    { kind: 'press', frame: 'index', column: 'current', label: 'B', target: 'B' },
+    { kind: 'route', from: 'index', to: '/habit', column: 'current' },
+    { kind: 'flush' },
+    { kind: 'press', frame: 'index', column: 'current', label: 'C', target: 'C' },
+    { kind: 'flush' },
+    { kind: 'press', frame: null, column: 'current', label: null, target: 'D' },
+    { kind: 'flush' },
+    { kind: 'store', store: 'editor', before: { scheme: 'light' }, after: { scheme: 'dark' } },
+    { kind: 'flush' },
+  );
+  assert.deepEqual(tallyPresses(state.entries), { presses: 4, live: 1, inert: 1, unattributed: 1, unlocated: 1 });
 });
 
 test('a press the studio could not place is counted apart from an inert press', () => {
@@ -344,9 +376,47 @@ test('a press the studio could not place is counted apart from an inert press', 
 
   const tally = tallyPresses(state.entries);
   assert.equal(tally.presses, 1);
-  assert.equal(tally.uninstrumented, 1);
+  assert.equal(tally.unlocated, 1);
   assert.equal(tally.inert, 0);
   assert.equal(state.entries[0].verdict, 'unlocated');
+});
+
+test('the tally survives the ring evicting the rows it counted', () => {
+  // The board prints "23 of 48 controls are live". A tally read off `entries`
+  // shrinks the moment the cap evicts a row, so that number would move mid-session
+  // with nothing happening to move it — and a measurement that changes without a
+  // cause is worse than no measurement, because it still looks like one.
+  const cap = 4;
+  let state = createSpine(cap);
+
+  for (let i = 0; i < 8; i++) {
+    state = spineReducer(state, { kind: 'press', frame: 'index', column: 'current', label: 'A', target: `t${i}` });
+    state = spineReducer(state, { kind: 'flush' });
+  }
+
+  assert.equal(state.entries.length, cap, 'the ring held to its cap');
+  assert.equal(state.dropped, 8 - cap, 'and said what it dropped');
+  assert.equal(state.tally.presses, 8, 'the tally kept every press the ring evicted');
+  assert.equal(tallyPresses(state.entries).presses, cap, 're-counting the rows would have lost four');
+});
+
+test('the press listener being attached is a state of the log, not an assumption', () => {
+  // "Nothing has been pressed" and "nothing was listening" are different sentences.
+  // The badge has to be able to tell them, which means the fact belongs in the
+  // state the badge reads rather than in the board component that happened to
+  // mount the listener.
+  let state = createSpine();
+  assert.equal(state.pressListening, false, 'not listening until something says so');
+
+  state = spineReducer(state, { kind: 'listener', attached: true });
+  assert.equal(state.pressListening, true);
+
+  // A fact about the reader is not an event: it commits no row and starts no task.
+  assert.equal(state.entries.length, 0);
+  assert.equal(state.seq, 0);
+
+  state = spineReducer(state, { kind: 'listener', attached: false });
+  assert.equal(state.pressListening, false, 'a listener that was removed is not listening');
 });
 
 /** The panel's own question: did a route change bring a state change with it? */

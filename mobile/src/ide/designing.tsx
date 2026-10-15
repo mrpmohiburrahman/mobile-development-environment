@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { recordRoute } from './spineStore';
+import type { Column } from './spine';
 
 /**
  * Screens rendered inside the blueprint need to behave slightly differently:
@@ -25,8 +26,13 @@ const DesigningContext = createContext(false);
  *
  * The frame's identity is what lets a route change say where it came from, and a
  * press say which frame it landed in.
+ *
+ * `BoardColumn` is the spine's `Column` under this module's name rather than a
+ * second copy of the same two-value union: a route fact and a press fact both carry
+ * it into the log, and two unions that happen to agree today are a drift waiting to
+ * be introduced.
  */
-export type BoardColumn = 'current' | 'comparison';
+export type BoardColumn = Column;
 export type Frame = { screenKey: string | null; column: BoardColumn };
 
 const FrameContext = createContext<Frame>({ screenKey: null, column: 'current' });

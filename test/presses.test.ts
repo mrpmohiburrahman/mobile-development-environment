@@ -47,7 +47,7 @@ test('a tallied board reports what it saw and nothing more', () => {
     { kind: 'flush' },
   );
 
-  const copy = describePresses(tallyPresses(entries));
+  const copy = describePresses(tallyPresses(entries), true);
   assert.equal(copy.live, 1);
   assert.equal(copy.inert, 1);
   assert.equal(copy.presses, 2);
@@ -78,24 +78,53 @@ test('every verdict reads differently, and none of them reads as fine by acciden
 });
 
 test('a press the studio could not place is reported as its own failure', () => {
-  const copy = describePresses(tallyPresses(observe({ kind: 'press', frame: null, column: 'current', label: null, target: 'X' }, { kind: 'flush' })));
-  assert.equal(copy.uninstrumented, 1);
+  const copy = describePresses(tallyPresses(observe({ kind: 'press', frame: null, column: 'current', label: null, target: 'X' }, { kind: 'flush' })), true);
+  assert.equal(copy.unlocated, 1);
   assert.match(copy.label, /could not/i);
   assert.equal(copy.tone, 'degraded');
 });
 
 test('a board nobody has pressed yet does not claim success', () => {
-  const copy = describePresses(tallyPresses([]));
+  const copy = describePresses(tallyPresses([]), true);
   assert.equal(copy.presses, 0);
   assert.notEqual(copy.tone, 'ok');
   assert.match(copy.label, /no presses/i);
+});
+
+test('a board nobody is listening to does not report a quiet board', () => {
+  // The honest-zero rule applied to the reader itself. If the capture listener
+  // never attached — no workspace node, or an early return in the effect — the
+  // tally is zero because nothing could have been counted, not because nothing was
+  // pressed. Reporting the second over the first is the exact failure this repo
+  // shipped with the frame walk: benign wording, completely wrong.
+  const notListening = describePresses(tallyPresses([]), false);
+  const quiet = describePresses(tallyPresses([]), true);
+
+  assert.equal(notListening.listening, false);
+  assert.equal(notListening.tone, 'degraded');
+  assert.match(notListening.label, /not listening/i);
+  assert.notEqual(notListening.label, quiet.label, 'the two zeros must not read as one string');
+  assert.notEqual(notListening.detail, quiet.detail);
+  // It names whose failure this is rather than the app's.
+  assert.match(notListening.detail, /listener/i);
+});
+
+test('presses gathered before the listener went away are still reported, with the gap stated', () => {
+  // A count taken while listening is real even after the listener is removed, so it
+  // is printed — but a badge that kept saying nothing would let the reader assume
+  // the board is still being watched and that the number is still growing.
+  const entries = observe(press('Avatar'), { kind: 'flush' });
+  const copy = describePresses(tallyPresses(entries), false);
+
+  assert.equal(copy.presses, 1, 'the press that was seen is not thrown away');
+  assert.match(copy.detail, /not being listened to/i);
 });
 
 test('the panel keeps the attribution and the count apart', () => {
   // "Two of nineteen presses changed something" is a claim. "Inert in the studio"
   // is a caveat on it. Fusing them makes a long list of caveats read as a list of
   // accusations.
-  const copy = describePresses(tallyPresses(observe(press('Avatar'), { kind: 'flush' })));
+  const copy = describePresses(tallyPresses(observe(press('Avatar'), { kind: 'flush' })), true);
   assert.match(copy.label, /0 of 1/);
   assert.doesNotMatch(copy.label, /inert/);
   assert.match(copy.detail, /inert/i);

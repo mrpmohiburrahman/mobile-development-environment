@@ -92,7 +92,9 @@ export type PressReport = {
   live: number;
   inert: number;
   unattributed: number;
-  uninstrumented: number;
+  unlocated: number;
+  /** Whether the board's capture listener was attached when this was read. */
+  listening: boolean;
 };
 
 /**
@@ -102,21 +104,45 @@ export type PressReport = {
  * matters: a panel that fuses them turns a caveat about the studio into an
  * accusation about the app, which is the reading this whole feature exists to
  * remove.
+ *
+ * `listening` is the honest-zero guard, and it is checked **first**. A tally of
+ * zero gathered by a listener that never attached is not "nothing was pressed" —
+ * it is "nothing was listening", and the two must not render as one string. That
+ * is the same distinction the change log draws for the stores, and collapsing it
+ * here would let a broken reader report a quiet board.
  */
-export function describePresses(tally: PressTally): PressReport {
-  const { presses, live, inert, unattributed, uninstrumented } = tally;
+export function describePresses(tally: PressTally, listening: boolean): PressReport {
+  const { presses, live, inert, unattributed, unlocated } = tally;
+
+  if (!listening && presses === 0) {
+    return {
+      tone: 'degraded',
+      label: 'presses: not listening',
+      detail:
+        'the board’s capture listener never attached, so no press could have been counted. This is a failed measurement, not a quiet board.',
+      ...tally,
+      listening,
+    };
+  }
+
+  // Presses gathered while it was listening, and the listener has since gone away.
+  // The count is still real, so it is reported — with the gap stated rather than
+  // left for the reader to assume the board is still being watched.
+  const stale = listening ? '' : ' The board is not being listened to right now, so this count has stopped growing.';
 
   if (presses === 0) {
     return {
       tone: 'muted',
       label: 'no presses counted',
       detail:
-        'press any control on the board to see whether it does anything. Nothing here has been pressed yet, which is not the same as nothing working.',
+        'press any control on the board to see whether it does anything. Nothing here has been pressed yet, which is not the same as nothing working.' +
+        stale,
       ...tally,
+      listening,
     };
   }
 
-  const located = presses - uninstrumented;
+  const located = presses - unlocated;
 
   // Nothing could be placed, so there is no measurement to report — only the
   // measurement's own failure. Rendering "0 of 0 presses changed something" would
@@ -124,29 +150,33 @@ export function describePresses(tally: PressTally): PressReport {
   if (located === 0) {
     return {
       tone: 'degraded',
-      label: `${uninstrumented} press${uninstrumented === 1 ? '' : 'es'} could not be placed on a frame`,
+      label: `${unlocated} press${unlocated === 1 ? '' : 'es'} could not be placed on a frame`,
       detail:
-        'the studio saw them and could not say which frame they landed on. That is a failed measurement, not a result about the app.',
+        'the studio saw them and could not say which frame they landed on. That is a failed measurement, not a result about the app.' +
+        stale,
       ...tally,
+      listening,
     };
   }
 
   // A failed measurement outranks a result: some presses were not placeable, so
   // the located count is incomplete and the badge must not present it as total.
-  if (uninstrumented > 0) {
+  if (unlocated > 0) {
     return {
       tone: 'degraded',
       label: `${live} of ${located} presses changed something`,
-      detail: `${uninstrumented} press${uninstrumented === 1 ? '' : 'es'} could not be placed on a frame, so the located count is incomplete. ${caveat(inert, unattributed)}`,
+      detail: `${unlocated} press${unlocated === 1 ? '' : 'es'} could not be placed on a frame, so the located count is incomplete. ${caveat(inert, unattributed)}` + stale,
       ...tally,
+      listening,
     };
   }
 
   return {
     tone: live === presses ? 'ok' : inert > 0 ? 'degraded' : 'muted',
     label: `${live} of ${presses} presses changed something`,
-    detail: caveat(inert, unattributed),
+    detail: caveat(inert, unattributed) + stale,
     ...tally,
+    listening,
   };
 }
 

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { useHabits } from '../store/habits';
 import { useEditorStore } from '../ds/editorState';
-import { createSpine, spineReducer, type SpineInput, type SpineState } from './spine';
+import { createSpine, spineReducer, type PressFact, type RouteFact, type SpineInput, type SpineState } from './spine';
 
 /**
  * The spine, wired to the two stores and the navigation seam.
@@ -43,6 +43,10 @@ import { createSpine, spineReducer, type SpineInput, type SpineState } from './s
 
 let state: SpineState = createSpine();
 let attached = false;
+/** How many callers are holding the subscriptions open. */
+let holders = 0;
+/** The live teardown, or null when nothing is subscribed. */
+let teardown: (() => void) | null = null;
 let flushQueued = false;
 const listeners = new Set<() => void>();
 
@@ -60,7 +64,9 @@ const dispatch = (input: SpineInput) => {
   if (next === state) return;
   state = next;
   emit();
-  if (input.kind !== 'flush') queueFlush();
+  // `flush` is the commit point and `listener` is a fact about the reader: neither
+  // is a task, so neither queues one.
+  if (input.kind !== 'flush' && input.kind !== 'listener') queueFlush();
 };
 
 const queueFlush = () => {
@@ -88,16 +94,51 @@ const appState = (s: { habits: unknown; signedIn: boolean; selectedId: string | 
 /**
  * Attach the log to both stores.
  *
- * Idempotent, and deliberately *not* called at module scope: until this runs the
- * log is not watching, and the panel says so. That is a real state rather than a
- * formality — "nothing has happened yet" and "the log is not listening" are
+ * Reference-counted, and deliberately *not* called at module scope: until this
+ * runs the log is not watching, and the panel says so. That is a real state rather
+ * than a formality — "nothing has happened yet" and "the log is not listening" are
  * different sentences, and collapsing them is how a reader concludes the app is
  * idle when nothing was ever wired up.
+ *
+ * ## Why the count, and why the teardown resets the flag
+ *
+ * The first version set `attached = true` and handed back a teardown that
+ * unsubscribed from both stores without ever clearing the flag. Leaving `/ide`
+ * ran the teardown; coming back called `attachSpine` again, saw `attached`, and
+ * returned a no-op — so the log was deaf for the rest of the session while
+ * `isSpineAttached()` still said it was watching. A panel that reports "watching"
+ * over a subscription that no longer exists is the exact failure this module's
+ * docblock exists to prevent, and it was silent.
+ *
+ * Counting rather than a boolean because two callers can hold the log open at
+ * once, and one of them leaving must not deafen the other.
  */
 export function attachSpine(): () => void {
-  if (attached) return () => {};
-  attached = true;
+  holders += 1;
+  if (!teardown) teardown = subscribeToStores();
 
+  let released = false;
+  return () => {
+    // Idempotent: React runs a cleanup once, but a caller may not, and double-
+    // decrementing would tear the subscriptions down under a live holder.
+    if (released) return;
+    released = true;
+    holders -= 1;
+    if (holders > 0 || !teardown) return;
+    teardown();
+    teardown = null;
+    emit();
+  };
+}
+
+/**
+ * The subscriptions themselves, and the flag that says they exist.
+ *
+ * `attached` is set and cleared here and nowhere else, so the flag and the
+ * subscriptions can never disagree — which is the whole claim `isSpineAttached()`
+ * makes.
+ */
+function subscribeToStores(): () => void {
   const unsubscribeApp = useHabits.subscribe((next, prev) =>
     dispatch({ kind: 'store', store: 'app', before: appState(prev), after: appState(next) }),
   );
@@ -112,10 +153,13 @@ export function attachSpine(): () => void {
     });
   });
 
+  attached = true;
   emit();
+
   return () => {
     unsubscribeApp();
     unsubscribeEditor();
+    attached = false;
   };
 }
 
@@ -123,16 +167,21 @@ export function attachSpine(): () => void {
 export const isSpineAttached = (): boolean => attached;
 
 /** Record a press. Called by the blueprint's capture-phase listener. */
-export const recordPress = (press: {
-  frame: string | null;
-  column: 'current' | 'comparison';
-  label: string | null;
-  target: string | null;
-}) => dispatch({ kind: 'press', ...press });
+export const recordPress = (press: PressFact) => dispatch({ kind: 'press', ...press });
 
 /** Record a route change. Called by the navigation seam in `designing.tsx`. */
-export const recordRoute = (route: { from: string | null; to: string; column: 'current' | 'comparison' }) =>
-  dispatch({ kind: 'route', ...route });
+export const recordRoute = (route: RouteFact) => dispatch({ kind: 'route', ...route });
+
+/**
+ * Whether the board's press listener is attached.
+ *
+ * Reported into the spine rather than kept in the board's local state, because the
+ * badge and the panel both print it and two copies of a fact about the reader is
+ * how they come to disagree. `false` on cleanup as well as `true` on attach: a
+ * listener that was removed is not listening, and a zero count gathered since then
+ * must not read as "nothing was pressed".
+ */
+export const setPressListening = (isListening: boolean) => dispatch({ kind: 'listener', attached: isListening });
 
 /** The whole log, for the panels. Stable identity between changes. */
 export const useSpine = (): SpineState => useSyncExternalStore(subscribe, getSpineState);

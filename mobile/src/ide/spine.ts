@@ -52,7 +52,9 @@
  * the studio could not even locate is counted apart from inert, because "I found
  * nothing" and "I looked in the wrong place" must never be the same number.
  *
- * Pure, and no runtime imports, so `test/spine.test.ts` can load it.
+ * This pure reducer imports the pure tree differ at runtime.
+ * Neither module requires React, a browser, or the token server to load.
+ * `test/spine.test.ts` loads it directly with the type-stripping runner.
  */
 
 import { diffTrees, type Difference } from '../ds/drift.ts';
@@ -69,6 +71,8 @@ export type SpineInput =
   | { kind: 'store'; store: StoreName; before: unknown; after: unknown }
   | { kind: 'route'; from: string | null; to: string; column: Column }
   | { kind: 'press'; frame: string | null; column: Column; label: string | null; target: string | null }
+  /** The board's capture listener came up or went away. A fact about the reader. */
+  | { kind: 'listener'; attached: boolean }
   | { kind: 'flush' };
 
 /** What was pressed, as far as the studio could establish. */
@@ -123,6 +127,25 @@ export type SpineState = {
   /** Entries the cap evicted. A truncated history must say it is truncated. */
   dropped: number;
   /**
+   * Every press ever decided, including the ones the ring has evicted.
+   *
+   * Deliberately **not** derived from `entries`. A tally read off the ring shrinks
+   * the moment the cap evicts a row, so the board's "23 of 48" would quietly become
+   * "23 of 47" mid-session — a number that changes without anything happening, which
+   * is the one thing a measurement must not do. Accumulated at commit instead, so
+   * eviction drops the *rows* and never the *count*.
+   */
+  tally: PressTally;
+  /**
+   * Whether the board's capture listener is attached right now.
+   *
+   * Part of the log's self-report rather than a panel's local state, because the
+   * badge and the panel both have to say it and they must not disagree. `false`
+   * until the listener really attaches: a press count of zero gathered by a listener
+   * that never ran is not "nothing was pressed", it is "nothing was listening".
+   */
+  pressListening: boolean;
+  /**
    * Store writes that diffed to nothing.
    *
    * This is what separates "watching, nothing has happened yet" from "watching,
@@ -150,12 +173,22 @@ const isEmpty = (p: Pending) => p.presses.length === 0 && p.routes.length === 0 
  */
 export const SPINE_CAP = 200;
 
+export const emptyTally = (): PressTally => ({
+  presses: 0,
+  live: 0,
+  inert: 0,
+  unattributed: 0,
+  unlocated: 0,
+});
+
 export function createSpine(cap: number = SPINE_CAP): SpineState {
   return {
     cap,
     seq: 0,
     entries: [],
     dropped: 0,
+    tally: emptyTally(),
+    pressListening: false,
     noopWrites: 0,
     routeEvents: 0,
     pending: emptyPending(),
@@ -204,13 +237,23 @@ export function spineReducer(state: SpineState, input: SpineInput): SpineState {
         pending: { ...state.pending, presses: [...state.pending.presses, input] },
       };
 
+    case 'listener':
+      // Not an event and never a row: nothing happened in the app. It is a fact
+      // about the reader, and the badge needs it to tell "nothing was pressed"
+      // from "nothing was listening".
+      return state.pressListening === input.attached ? state : { ...state, pressListening: input.attached };
+
     case 'flush': {
       if (isEmpty(state.pending)) return state;
       const seq = state.seq + 1;
+      const rows = buildRows(seq, state.pending);
       return {
         ...state,
         seq,
-        ...commitRows(state, buildRows(seq, state.pending)),
+        ...commitRows(state, rows),
+        // Accumulated from the rows being committed, never re-read off the ring,
+        // so an eviction cannot move a count nothing moved.
+        tally: addTally(state.tally, tallyPresses(rows)),
         pending: emptyPending(),
       };
     }
@@ -366,27 +409,50 @@ export type PressTally = {
   inert: number;
   unattributed: number;
   /** Presses the studio could not attribute to a frame. A failed measurement. */
-  uninstrumented: number;
+  unlocated: number;
 };
 
 /**
  * The board-chrome count.
  *
- * `uninstrumented` is counted apart from `inert` rather than folded in. A sound
+ * `unlocated` is counted apart from `inert` rather than folded in, and shares the
+ * verdict's own name — one concept, one word, so a reader who sees `unlocated` in
+ * a row and `unlocated` in a tally is looking at the same thing twice. A sound
  * decision function fed nothing by a broken reader is a defect this codebase has
  * already shipped once, and it presented as "nothing found".
  */
 export function tallyPresses(entries: SpineEntry[]): PressTally {
-  const tally: PressTally = { presses: 0, live: 0, inert: 0, unattributed: 0, uninstrumented: 0 };
+  const tally = emptyTally();
 
   for (const entry of entries) {
     if (!entry.press) continue;
+    const verdict = entry.verdict;
+    if (verdict === null) throw new Error('Invalid press verdict.');
+    switch (verdict) {
+      case 'live':
+      case 'inert':
+      case 'unattributed':
+      case 'unlocated':
+        tally[verdict]++;
+        break;
+      default: {
+        const invalid: never = verdict;
+        throw new Error(`Invalid press verdict: ${String(invalid)}.`);
+      }
+    }
     tally.presses++;
-    if (entry.verdict === 'live') tally.live++;
-    else if (entry.verdict === 'inert') tally.inert++;
-    else if (entry.verdict === 'unattributed') tally.unattributed++;
-    else tally.uninstrumented++;
   }
 
   return tally;
+}
+
+/** Two tallies summed. Used to accumulate at commit, so the ring cannot lose one. */
+export function addTally(a: PressTally, b: PressTally): PressTally {
+  return {
+    presses: a.presses + b.presses,
+    live: a.live + b.live,
+    inert: a.inert + b.inert,
+    unattributed: a.unattributed + b.unattributed,
+    unlocated: a.unlocated + b.unlocated,
+  };
 }
