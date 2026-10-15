@@ -5,10 +5,11 @@ import {
   fontVerdictCopy,
   judgeCandidates,
   parseFontStack,
+  typeVerdictCopy,
   verifyTypeTokens,
   type FontCandidate,
   type ObservedType,
-  type TypeReport,
+  type TypeRoleToken,
 } from './renderFidelity';
 import { observeTypeStyles, probeFontCandidates } from './renderFidelity.dom';
 import { resolveFrames } from './boardFrames';
@@ -32,7 +33,7 @@ function readDisplayStack(): string[] {
 export type RenderVerdict = {
   candidates: FontCandidate[];
   observed: ObservedType[] | null;
-  typeTokens: Record<string, { size: number; weight: string; lineHeight: number; letterSpacing: number }>;
+  typeTokens: Record<string, TypeRoleToken>;
   measured: boolean;
   /** How many frames were read, and how many the board has that were not. */
   framesRead: number;
@@ -43,17 +44,23 @@ export type RenderVerdict = {
  * Measure the render, once, after the board has painted.
  *
  * `requestAnimationFrame` rather than an effect, because the whole subject is
- * computed styles of nodes that have to exist first. Re-reads whenever the log
- * moves, so dragging `type.caption.size` moves the verification line — the negative
- * control for the whole feature, and the reason this is a measurement rather than
- * a claim made once at start-up.
+ * computed styles of nodes that have to exist first. Re-reads whenever the tokens
+ * change, so dragging `type.caption.size` moves the verification line — the
+ * negative control for the whole feature, and the reason this is a measurement
+ * rather than a claim made once at start-up.
+ *
+ * The dependency is the token JSON and nothing else. An earlier version folded the
+ * verdict's own candidate count into it, which made the effect depend on the state
+ * it sets: every measurement re-ran the measurement, and the only thing stopping
+ * the loop was that the count happened to settle. A hook that has to be talked out
+ * of its own output by an `eslint-disable` is the sign of that, so the disable is
+ * gone and the dependency list is complete instead.
  */
 export function useRenderVerdict(host: RefObject<View | null>): RenderVerdict | null {
   const tokens = useTokens();
   const [verdict, setVerdict] = useState<RenderVerdict | null>(null);
 
   const typeJson = JSON.stringify(tokens.type);
-  const signature = `${typeJson}#${verdict?.candidates.length ?? 0}`;
 
   useEffect(() => {
     const node = host.current as unknown as HTMLElement | null;
@@ -80,71 +87,9 @@ export function useRenderVerdict(host: RefObject<View | null>): RenderVerdict | 
     });
 
     return () => cancelAnimationFrame(id);
-    // `signature` rather than `verdict`, which would rebuild the effect it set.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [host, signature]);
+  }, [host, typeJson]);
 
   return verdict;
-}
-
-/** How the type part reports itself, in the studio's own three-state voice. */
-function typeCopy(report: TypeReport | null, measured: boolean): { tone: string; label: string; detail: string } {
-  if (!report || !measured) {
-    return {
-      tone: 'degraded',
-      label: 'type tokens: not measured',
-      detail: 'the studio read no screens, so it is not claiming the tokens reached one',
-    };
-  }
-
-  const unreached = report.roles.filter((r) => r.verdict === 'unreached').map((r) => r.role);
-  const unattributed = report.roles.filter((r) => r.verdict === 'unattributed').map((r) => r.role);
-  const overridden = report.roles.filter((r) => r.verdict === 'overridden');
-  const broken = report.roles.filter((r) => r.verdict === 'mismatch');
-
-  if (unreached.length > 0) {
-    return {
-      tone: 'degraded',
-      label: `${unreached.join(', ')} ${unreached.length === 1 ? 'renders' : 'render'} on no screen`,
-      detail:
-        'no node on the board renders at that role’s size, so the token did not reach a screen. That is a broken render reported as a clean one without this check.',
-    };
-  }
-
-  if (broken.length > 0) {
-    const [first] = broken;
-    const where = first.overrides[0];
-    return {
-      tone: 'degraded',
-      label: `${broken.length} of ${report.roles.length} type roles reach nothing`,
-      detail: `${first.role} is used on ${first.nodes} node${first.nodes === 1 ? '' : 's'} and every one of them sets ${where.property} to ${where.found} where the token says ${where.expected}.`,
-    };
-  }
-
-  const verified = report.roles.filter((r) => r.verdict === 'verified').length;
-
-  // The override is an observation, not a fault. The app's uppercase section
-  // headings share `type.label`'s size and weight and deliberately set their own
-  // letter spacing; saying so is the studio's job, calling it broken is not.
-  if (overridden.length > 0) {
-    const [first] = overridden;
-    const where = first.overrides[0];
-    return {
-      tone: 'muted',
-      label: `${verified} type roles verified, ${overridden.length} partly overridden`,
-      detail: `${first.role} reaches ${first.agreeing} node${first.agreeing === 1 ? '' : 's'} exactly and is overridden on ${where?.nodes ?? 0} more, where ${where?.property} is ${where?.found} rather than ${where?.expected}. Whether that is intended is the app's call, not the studio's.`,
-    };
-  }
-
-  return {
-    tone: unattributed.length > 0 ? 'muted' : 'ok',
-    label: `${verified} type roles verified on ${report.screensVerified} screen${report.screensVerified === 1 ? '' : 's'}`,
-    detail:
-      `${report.propertiesVerified} properties compared — size, line height, letter spacing and weight, read from computed styles on ${report.screensVerified} screen${report.screensVerified === 1 ? '' : 's'}.` +
-      (unattributed.length > 0
-        ? ` ${unattributed.join(', ')} share${unattributed.length === 1 ? 's' : ''} a size with other text rather than carrying the role, so it was neither checked nor cleared.`
-        : ''),
-  };
 }
 
 /**
@@ -176,7 +121,10 @@ export function RenderVerdictBadge({ host }: { host: RefObject<View | null> }) {
   }
 
   const font = fontVerdictCopy(verdict.candidates);
-  const type = typeCopy(verdict.observed ? verifyTypeTokens(verdict.typeTokens, verdict.observed) : null, verdict.measured);
+  const type = typeVerdictCopy(
+    verdict.observed ? verifyTypeTokens(verdict.typeTokens, verdict.observed) : null,
+    verdict.measured,
+  );
 
   return (
     <View style={{ gap: 2, maxWidth: 560 }}>
@@ -184,7 +132,7 @@ export function RenderVerdictBadge({ host }: { host: RefObject<View | null> }) {
         <Label role="caption" color={TONE[font.tone]} style={{ fontWeight: '600' }} numberOfLines={1}>
           {font.label}
         </Label>
-        <Label role="caption" color={TONE[type.tone as keyof typeof TONE]} style={{ fontWeight: '600' }} numberOfLines={1}>
+        <Label role="caption" color={TONE[type.tone]} style={{ fontWeight: '600' }} numberOfLines={1}>
           {type.label}
         </Label>
       </View>

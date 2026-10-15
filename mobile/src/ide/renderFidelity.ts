@@ -11,12 +11,20 @@
  *
  * ## What the number says today
  *
- * The display stack names two families ahead of the system fallbacks. Neither is
- * installed on the machine this was written on, no `@font-face` is declared
- * anywhere in the app, and the type tokens carry no `fontFamily` at all — so the
- * stack resolves to the system face here, to a different face on a machine that
- * has the named family, and to a third on Linux. Three machines, three rasters,
- * one committed tree.
+ * The display stack names two families ahead of the system fallbacks: `Spline
+ * Sans`, then `Inter`. The plan predicted both would be absent, and the measurement
+ * found it was half right — **`Spline Sans` is absent and `Inter` is present**. No
+ * `@font-face` is declared anywhere in the app, the font package is imported by
+ * nothing, and the type tokens carry no `fontFamily` at all, so the `Inter` that
+ * wins came off this machine rather than out of the commit. (It is not in any font
+ * directory either: it is a file inside an unrelated application bundle, which is
+ * why three independent measurements had to agree before the answer was believed.)
+ *
+ * That is a **stronger** finding than the one predicted, not a weaker one, and the
+ * correction is the point of measuring rather than assuming: a machine-dependent
+ * face the repository does not ship still means the stack resolves to one face
+ * here, a different one on a machine without it, and a third on Linux. Three
+ * machines, three rasters, one committed tree.
  *
  * That is worse than a font-loading race, which `document.fonts.ready` solves. It
  * is font *availability*: a per-machine property, already settled, that waiting
@@ -48,11 +56,14 @@
  * - No new dependency, here or in the server. If this ever needs a rasterisation
  *   library it has stopped being this work.
  *
- * Pure, and no runtime imports, so `test/renderFidelity.test.ts` can load it. The
- * browser half lives in `renderFidelity.dom.ts` and holds no decisions.
+ * These pure functions import the drift normalizer at runtime.
+ * Module loading requires no React, browser, or token server.
+ * `test/renderFidelity.test.ts` loads it directly with the type-stripping runner.
+ * `renderFidelity.dom.ts` collects the browser measurements.
  */
 
 import { normalizeValue } from './detectDrift.ts';
+import type { Tone } from '../ds/reachability.ts';
 
 /**
  * The two families every candidate is measured against.
@@ -131,9 +142,6 @@ const push = (out: string[], value: string) => {
   if (trimmed !== '') out.push(trimmed);
 };
 
-/** The two references, and the width each of them renders the test string at. */
-const REFERENCE_WIDTHS = { monospace: 42, serif: 99 };
-
 /**
  * What the browser measured for one candidate.
  *
@@ -142,6 +150,13 @@ const REFERENCE_WIDTHS = { monospace: 42, serif: 99 };
  * match each other; if it is not, the numbers become the reference's own widths.
  * `referenceWidths` is what each reference renders alone, which is what turns
  * "the numbers match each other" into "the numbers match the fallback".
+ *
+ * Optional, and its absence is a verdict rather than a default. There is no
+ * hard-coded table of reference widths to fall back on: a width invented here
+ * would be compared against a real one out there, and a family judged against
+ * invented metrics can be called `present` on a browser that disagrees — which is
+ * this module's own rule ("an unanswerable candidate reads as unknown or
+ * unmeasured, never as fine") broken in the one place it matters most.
  */
 export type CandidateProbe = {
   family: string;
@@ -193,7 +208,13 @@ function judge(family: string, probe: CandidateProbe | undefined): FontFate {
   if (isKeyword(family)) return 'keyword';
   if (!probe) return 'unmeasured';
 
-  const references = probe.referenceWidths ?? REFERENCE_WIDTHS;
+  const references = probe.referenceWidths;
+  // No reference widths means nothing to compare against, and comparing against
+  // invented ones would produce a verdict that looks measured and is not. Unknown,
+  // which is the honest answer and reads as unknown in the report.
+  if (!references) return 'unknown';
+  if (REFERENCES.some((ref) => references[ref] === undefined)) return 'unknown';
+
   const identical = REFERENCES.filter((ref) => probe.widths[ref] === references[ref]);
 
   // Equal to every reference: the browser had nothing named here and used the
@@ -209,7 +230,7 @@ function judge(family: string, probe: CandidateProbe | undefined): FontFate {
 }
 
 export type FontCopy = {
-  tone: 'ok' | 'degraded' | 'muted';
+  tone: Tone;
   /** False when no candidate was measured at all. */
   answered: boolean;
   measured: number;
@@ -251,15 +272,33 @@ export function fontVerdictCopy(candidates: FontCandidate[]): FontCopy {
   // one committed tree, a different raster per machine, and no way to tell from
   // the repository which one you are looking at.
   if (winner && !isKeyword(winner.family)) {
+    // Named families sitting *ahead* of the winner that the studio could not
+    // resolve. A cascade draws the first family it has, so an unresolved earlier
+    // candidate means the winner is a provisional answer: the face that actually
+    // drew the glyphs may be the one the probe could not judge. Observed once on a
+    // cold load, when a measurement taken before the platform's faces had settled
+    // came back inconclusive and the report named `Apple Color Emoji` — sixth in
+    // the stack — with total confidence.
+    const winnerAt = named.findIndex((c) => c === winner);
+    const shadowed = named.slice(0, winnerAt).filter((c) => c.fate === 'unknown' || c.fate === 'unmeasured').map((c) => c.family);
+    const provisional =
+      shadowed.length > 0
+        ? ` ${shadowed.join(' and ')} sit${shadowed.length === 1 ? 's' : ''} ahead of it in the stack and could not be resolved, so this is the first family the studio could judge rather than a proof of which one drew the glyphs.`
+        : '';
+
     return {
       tone: 'degraded',
       answered: true,
       measured: measured.length,
       total: candidates.length,
-      label: `renders in ${winner.family}, which this repo does not ship`,
+      label:
+        shadowed.length > 0
+          ? `renders in ${winner.family}, which this repo does not ship (provisional)`
+          : `renders in ${winner.family}, which this repo does not ship`,
       detail:
         `no font face is declared anywhere in the app, the type tokens carry no font family at all, and ${winner.family} is still what wins — so the face came from whatever this machine happens to have installed, not from the commit. ` +
-        `${missing.length} of ${named.length} named families in the stack are absent here. A machine without ${winner.family} renders something else, and Linux renders a third.`,
+        `${missing.length} of ${named.length} named families in the stack are absent here. A machine without ${winner.family} renders something else, and Linux renders a third.` +
+        provisional,
     };
   }
 
@@ -318,12 +357,8 @@ export type ObservedType = {
 };
 
 /**
- * - `verified` — nodes carry this role's size and weight, and agree on the rest.
- * - `mismatch` — nodes carry this role's size and weight, and at least one other
- *   property disagrees.
- * - `unreached` — no node on the board renders at this role's size, so the token
- *   did not reach a screen.
-/**
+ * What happened to one `type.*` role on the real board.
+ *
  * - `verified` — every node carrying this role's size and weight agrees with the
  *   rest of the token.
  * - `overridden` — some nodes agree and some do not. The token reaches the screen
@@ -333,8 +368,10 @@ export type ObservedType = {
  * - `mismatch` — **no** node carrying this role agrees. The token's values reach
  *   nothing, which is the broken-render case this check exists for.
  * - `unreached` — no node on the board renders at this role's size.
- * - `unattributed` — nodes render at this role's size but none with its weight.
- *   Something is using the size; nothing is using the role.
+ * - `unowned` — nodes render at this role's size but none with its weight.
+ *   Something is using the size; nothing is using the role. Named apart from the
+ *   press verdict `unattributed`, which means a later press in a task was not
+ *   credited: two different facts in one diff would otherwise share one word.
  * - `unread` — nothing was read at all. Not a claim.
  */
 export type TypeRoleVerdict =
@@ -342,7 +379,7 @@ export type TypeRoleVerdict =
   | 'overridden'
   | 'mismatch'
   | 'unreached'
-  | 'unattributed'
+  | 'unowned'
   | 'unread';
 
 export type TypeMismatch = { property: string; expected: string; found: string; nodes: number };
@@ -368,9 +405,23 @@ export type TypeReport = {
   measured: boolean;
 };
 
-/** The properties a `type.*` token carries. Two identify a role; two are checked. */
-const TYPE_PROPERTIES = ['fontSize', 'lineHeight', 'letterSpacing', 'fontWeight'] as const;
-const CHECKED = ['lineHeight', 'letterSpacing'] as const;
+/**
+ * The properties a `type.*` token carries, and the two of them that are checked.
+ *
+ * Exported so the browser half reads the same list it is being asked about. It
+ * kept its own copy of these four names, and two copies of a list that has to
+ * agree is a drift nobody reports: the reader would collect one set of computed
+ * styles while the decision function compared another.
+ *
+ * `ATTRIBUTING` are the two properties that decide *which* role a node carries —
+ * size and weight. `CHECKED` are the two that are then compared against the token.
+ * The split is the reason `propertiesVerified` counts `CHECKED` and not all four:
+ * a property used to find a node was not verified against anything, and counting it
+ * would double the sample size on paper.
+ */
+export const TYPE_PROPERTIES = ['fontSize', 'lineHeight', 'letterSpacing', 'fontWeight'] as const;
+export const ATTRIBUTING = ['fontSize', 'fontWeight'] as const;
+export const CHECKED = ['lineHeight', 'letterSpacing'] as const;
 
 /**
  * Check every `type.*` role against what the screens actually render.
@@ -400,6 +451,9 @@ export function verifyTypeTokens(
   observed: ObservedType[],
 ): TypeReport {
   const measured = observed.length > 0;
+  /** The nodes each role claimed, kept so the screen count does not re-derive them. */
+  const claimedNodes = new Map<string, ObservedType[]>();
+
   const claimedBy = (role: string): ObservedType[] => {
     const token = tokens[role];
     const weight = normalizeValue('fontWeight', token.weight);
@@ -418,8 +472,9 @@ export function verifyTypeTokens(
 
     const mine = claimedBy(role);
     if (mine.length === 0) {
-      return { role, verdict: 'unattributed', nodes: 0, agreeing: 0, overrides: [] };
+      return { role, verdict: 'unowned', nodes: 0, agreeing: 0, overrides: [] };
     }
+    claimedNodes.set(role, mine);
 
     const agreeing = mine.filter((o) => agrees(o, token));
     const disagreeing = mine.filter((o) => !agrees(o, token));
@@ -444,13 +499,15 @@ export function verifyTypeTokens(
     return { role, verdict, nodes: mine.length, agreeing: agreeing.length, overrides };
   });
 
-  const claimed = roles.filter((r) => r.verdict !== 'unreached' && r.verdict !== 'unattributed' && r.verdict !== 'unread');
-  const screens = new Set(claimed.flatMap((r) => claimedBy(r.role).map((o) => o.screen)));
+  const screens = new Set([...claimedNodes.values()].flat().map((o) => o.screen));
 
   return {
     roles,
     screensVerified: screens.size,
-    propertiesVerified: claimed.length * TYPE_PROPERTIES.length,
+    // Compared, not carried. Size and weight found the nodes; line height and
+    // letter spacing were checked against the token, and only a check is a
+    // verification. Counting all four would print a sample size twice the real one.
+    propertiesVerified: claimedNodes.size * CHECKED.length,
     measured,
   };
 }
@@ -460,6 +517,93 @@ const agrees = (o: ObservedType, token: TypeRoleToken): boolean =>
     (property) =>
       normalizedStyle(o, property) === (property === 'lineHeight' ? `${token.lineHeight}px` : `${token.letterSpacing}px`),
   );
+
+export type TypeCopy = { tone: Tone; label: string; detail: string };
+
+/**
+ * How the type part reports itself, in the studio's own three-state voice.
+ *
+ * Lives here rather than in the badge that renders it, because turning a report
+ * into a sentence is a **decision** and this repo's seam puts decisions in pure
+ * modules: the browser half gathers facts, the pure half decides what they mean. A
+ * decision inside a `.tsx` file cannot be loaded by the type-stripping test runner,
+ * so it could only ever be checked by looking at it — and the wording is the thing
+ * most worth checking, because it is what stops a broken measurement reading as a
+ * clean one.
+ */
+export function typeVerdictCopy(report: TypeReport | null, measured: boolean): TypeCopy {
+  if (!report || !measured) {
+    return {
+      tone: 'degraded',
+      label: 'type tokens: not measured',
+      detail: 'the studio read no screens, so it is not claiming the tokens reached one',
+    };
+  }
+
+  const unreached = report.roles.filter((r) => r.verdict === 'unreached').map((r) => r.role);
+  const unowned = report.roles.filter((r) => r.verdict === 'unowned').map((r) => r.role);
+  const overridden = report.roles.filter((r) => r.verdict === 'overridden');
+  const broken = report.roles.filter((r) => r.verdict === 'mismatch');
+  const verified = report.roles.filter((r) => r.verdict === 'verified').length;
+
+  /**
+   * The sample size, appended to every answered verdict.
+   *
+   * Appended rather than printed only on the clean one, because "the sample size
+   * sits next to the claim" is worth least exactly where a report looks most
+   * settled. A reader who sees "3 type roles verified, 2 partly overridden" and
+   * stops reading has been told the verdict and not how much board it rests on.
+   *
+   * It names what was compared and what was not: size and weight found the nodes,
+   * so counting all four properties would print a sample size twice the size of the
+   * measurement behind it.
+   */
+  const screenWord = report.screensVerified === 1 ? 'screen' : 'screens';
+  const sample = `${report.propertiesVerified} properties compared — ${CHECKED.join(' and ')} — on ${report.screensVerified} ${screenWord}. Size and weight found the nodes rather than being checked against them.`;
+
+  if (unreached.length > 0) {
+    return {
+      tone: 'degraded',
+      label: `${unreached.join(', ')} ${unreached.length === 1 ? 'renders' : 'render'} on no screen`,
+      detail:
+        'no node on the board renders at that role’s size, so the token did not reach a screen. That is a broken render reported as a clean one without this check. ' +
+        sample,
+    };
+  }
+
+  if (broken.length > 0) {
+    const [first] = broken;
+    const where = first.overrides[0];
+    return {
+      tone: 'degraded',
+      label: `${broken.length} of ${report.roles.length} type roles reach nothing`,
+      detail: `${first.role} is used on ${first.nodes} node${first.nodes === 1 ? '' : 's'} and every one of them sets ${where.property} to ${where.found} where the token says ${where.expected}. ${sample}`,
+    };
+  }
+
+  // The override is an observation, not a fault. The app's uppercase section
+  // headings share `type.label`'s size and weight and deliberately set their own
+  // letter spacing; saying so is the studio's job, calling it broken is not.
+  if (overridden.length > 0) {
+    const [first] = overridden;
+    const where = first.overrides[0];
+    return {
+      tone: 'muted',
+      label: `${verified} type roles verified, ${overridden.length} partly overridden`,
+      detail: `${first.role} reaches ${first.agreeing} node${first.agreeing === 1 ? '' : 's'} exactly and is overridden on ${where?.nodes ?? 0} more, where ${where?.property} is ${where?.found} rather than ${where?.expected}. Whether that is intended is the app's call, not the studio's. ${sample}`,
+    };
+  }
+
+  return {
+    tone: unowned.length > 0 ? 'muted' : 'ok',
+    label: `${verified} type roles verified on ${report.screensVerified} ${screenWord}`,
+    detail:
+      sample +
+      (unowned.length > 0
+        ? ` ${unowned.join(', ')} share${unowned.length === 1 ? 's' : ''} a size with other text rather than carrying the role, so it was neither checked nor cleared.`
+        : ''),
+  };
+}
 
 /**
  * Compare a computed value the way the drift detector compares one.

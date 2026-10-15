@@ -45,6 +45,7 @@ import {
   parseFontStack,
   judgeCandidates,
   fontVerdictCopy,
+  typeVerdictCopy,
   verifyTypeTokens,
   REFERENCES,
   isKeyword,
@@ -132,6 +133,47 @@ test('a candidate the studio could not measure at all is unmeasured, not absent'
   const inter = judged.find((c) => c.family === 'Inter');
   assert.equal(inter?.fate, 'unmeasured');
   assert.notEqual(inter?.fate, 'fell-through', 'an absent probe is not evidence of absence');
+});
+
+test('a probe with no reference widths is unknown, never judged against invented ones', () => {
+  // The regression this replaces. `judge` used to fall back on a hard-coded
+  // `{ monospace: 42, serif: 99 }` when the reader sent no reference widths, so a
+  // browser whose real references differ from those two numbers would have a family
+  // compared against widths that were made up — and "equal to none of them" reads
+  // as `present`. That is this module's own rule ("an unanswerable candidate reads
+  // as unknown or unmeasured, never as fine") broken in the one place it matters,
+  // by the fallback that was supposed to be harmless.
+  const widths = { monospace: 42, serif: 99 };
+
+  // Widths that *equal* the old invented table: the case that used to be called
+  // fell-through on the strength of a coincidence with a constant.
+  assert.equal(
+    judgeCandidates(parseFontStack('Spline Sans'), [{ family: 'Spline Sans', widths }])[0].fate,
+    'unknown',
+  );
+  // And widths that differ from everything: the case that used to be called present.
+  assert.equal(
+    judgeCandidates(parseFontStack('Spline Sans'), [
+      { family: 'Spline Sans', widths: { monospace: 300, serif: 301 } },
+    ])[0].fate,
+    'unknown',
+  );
+  // A partial reference table is as unanswerable as no table at all.
+  assert.equal(
+    judgeCandidates(parseFontStack('Spline Sans'), [
+      { family: 'Spline Sans', widths: { monospace: 42, serif: 55 }, referenceWidths: { monospace: 42 } },
+    ])[0].fate,
+    'unknown',
+  );
+
+  // With real reference widths the same numbers decide properly, so the guard is
+  // not simply refusing to answer everything.
+  assert.equal(
+    judgeCandidates(parseFontStack('Spline Sans'), [
+      { family: 'Spline Sans', widths: { monospace: 300, serif: 301 }, referenceWidths: REFS },
+    ])[0].fate,
+    'present',
+  );
 });
 
 test('generic keywords are named as keywords, not probed as families', () => {
@@ -241,6 +283,39 @@ test('the copy names how many candidates were actually measured', () => {
   assert.equal(copy.total, 9);
 });
 
+test('a winner sitting behind an unresolved family is called provisional', () => {
+  // A cascade draws the first family it has, so the first family the studio could
+  // *judge* is not necessarily the one that drew the glyphs. Observed on a cold
+  // load: an inconclusive measurement of `Inter` promoted `Apple Color Emoji` —
+  // sixth in the stack — and the badge named it with total confidence. The rule
+  // this module exists to hold is that an unanswerable candidate never reads as
+  // fine, and quietly promoting a later family over one is the same break wearing
+  // a confident label.
+  const inconclusive = (family: string): CandidateProbe => ({
+    family,
+    // Matches one reference and not the other: a coincidence the studio declines to
+    // read either way.
+    widths: { monospace: REFS.monospace, serif: 300 },
+    referenceWidths: REFS,
+  });
+
+  const copy = fontVerdictCopy(
+    judgeCandidates(parseFontStack(DISPLAY), [fellThrough('Spline Sans'), inconclusive('Inter'), found('Apple Color Emoji')]),
+  );
+
+  assert.match(copy.label, /renders in Apple Color Emoji/);
+  assert.match(copy.label, /provisional/, 'the label has to say the answer is not settled');
+  assert.match(copy.detail, /Inter sits ahead of it/, 'and name the family that could not be resolved');
+  assert.match(copy.detail, /could not be resolved/);
+
+  // The settled case still reads as settled, so the caveat is not decoration.
+  const settled = fontVerdictCopy(
+    judgeCandidates(parseFontStack(DISPLAY), [fellThrough('Spline Sans'), found('Inter')]),
+  );
+  assert.doesNotMatch(settled.label, /provisional/);
+  assert.doesNotMatch(settled.detail, /sits ahead|sit ahead/);
+});
+
 // -- The type tokens, checked against what the screens really render. ----------
 
 const roles: Record<string, TypeRoleToken> = {
@@ -328,7 +403,10 @@ test('an overridden role is not counted as reaching nothing', () => {
       { screen: 'index', style: rendered({ fontSize: '13px', fontWeight: '600', lineHeight: '18px', letterSpacing: '1.2px' }) },
     ],
   );
-  assert.equal(report.propertiesVerified, 4, 'the role was checked; it is not skipped');
+  // Two, not four: size and weight found the node, line height and letter spacing
+  // were compared against the token. Counting the attribution keys would print a
+  // sample size twice the measurement behind it.
+  assert.equal(report.propertiesVerified, 2, 'the role was checked; it is not skipped');
 });
 
 test('the browser font-weight vocabulary is folded back to the file', () => {
@@ -362,16 +440,21 @@ test('a node sharing a role’s size but not its weight is not that role', () =>
   assert.equal(report.roles[0].nodes, 1, 'only the node that carries the role counts');
 });
 
-test('a size nobody carries the weight for is unattributed, not verified', () => {
+test('a size nobody carries the weight for is unowned, not verified', () => {
   // Something is using the size and nothing is using the role. Reporting a pass
   // would clear a token the board never showed; reporting a failure would invent
   // one. So it reports neither.
+  //
+  // Named `unowned` rather than `unattributed`, which the press verdicts already
+  // use for a different fact — a later press in a task that was not credited with
+  // the change. Two meanings sharing one word in one diff is how a reader comes to
+  // believe a report says something it does not.
   const report = verifyTypeTokens(
     { caption: { size: 12, weight: '400', lineHeight: 16, letterSpacing: 0.1 } },
     [{ screen: 'index', style: rendered({ fontSize: '12px', fontWeight: '700' }) }],
   );
 
-  assert.equal(report.roles[0].verdict, 'unattributed');
+  assert.equal(report.roles[0].verdict, 'unowned');
   assert.equal(report.propertiesVerified, 0, 'an unclaimed role verified no properties');
 });
 
@@ -417,8 +500,10 @@ test('the properties verified are counted, not assumed', () => {
     { screen: 'habit', style: rendered({ fontSize: '20px', fontWeight: '700', lineHeight: '26px', letterSpacing: '-0.3px' }) },
   ]);
 
-  // Two roles matched at least one node, four properties each.
-  assert.equal(report.propertiesVerified, 8);
+  // Two roles matched at least one node, and two properties were compared for each.
+  // Size and weight are how a node is attributed to a role, so they are not
+  // verifications — counting them would double the sample size on paper.
+  assert.equal(report.propertiesVerified, 4);
   // Three screens contributed a node, which is the sample size behind the claim.
   assert.equal(report.screensVerified, 3);
 });
@@ -439,4 +524,51 @@ test('a role added to the tokens without a screen is reported, not skipped', () 
 
   assert.deepEqual(report.roles.map((r) => r.role).sort(), ['body', 'ghost', 'title']);
   assert.equal(report.roles.find((r) => r.role === 'ghost')?.verdict, 'unreached');
+});
+
+// ---------------------------------------------------------------------------
+// The verdict sentence, as the badge prints it
+// ---------------------------------------------------------------------------
+
+test('every answered type verdict carries its sample size', () => {
+  // Ticket 06: "The report states how many screens and how many properties were
+  // verified, so the sample size sits next to the claim." Worth least exactly where
+  // a report looks most settled, so it is appended to every answered branch rather
+  // than to the clean one. The real board lands in `overridden`, which is the
+  // branch that used to print a verdict and no sample size at all.
+  const observed = [
+    { screen: 'index', style: rendered({ fontSize: '13px', fontWeight: '600', lineHeight: '18px', letterSpacing: '0.2px' }) },
+    { screen: 'index', style: rendered({ fontSize: '13px', fontWeight: '600', lineHeight: '18px', letterSpacing: '1.2px' }) },
+    { screen: 'habits', style: rendered() },
+  ];
+
+  const cases: [string, ReturnType<typeof verifyTypeTokens>, boolean][] = [
+    ['overridden', verifyTypeTokens({ label: { size: 13, weight: '600', lineHeight: 18, letterSpacing: 0.2 } }, observed), true],
+    ['mismatch', verifyTypeTokens({ body: { size: 16, weight: '400', lineHeight: 99, letterSpacing: 0 } }, [{ screen: 'index', style: rendered() }]), true],
+    ['unreached', verifyTypeTokens({ ghost: { size: 99, weight: '400', lineHeight: 120, letterSpacing: 0 } }, [{ screen: 'index', style: rendered() }]), true],
+    ['verified', verifyTypeTokens({ body: { size: 16, weight: '400', lineHeight: 24, letterSpacing: 0 } }, [{ screen: 'index', style: rendered() }]), true],
+    ['unread', verifyTypeTokens(roles, []), false],
+  ];
+
+  for (const [name, report, measured] of cases) {
+    const copy = typeVerdictCopy(report, measured);
+    if (name === 'unread') {
+      assert.match(copy.label, /not measured/i, 'an unread board says so');
+      assert.doesNotMatch(copy.detail, /properties compared/, 'an unread board claims no sample');
+      continue;
+    }
+    assert.match(copy.detail, /\d+ properties compared/, `${name} printed a verdict with no sample size`);
+    assert.match(copy.detail, /lineHeight and letterSpacing/, `${name} did not say which properties were compared`);
+    // The attribution keys are named as what they are, so the count cannot be read
+    // as four properties checked per role.
+    assert.match(copy.detail, /found the nodes/, `${name} did not say what size and weight were used for`);
+  }
+});
+
+test('the type verdict is not a string-typed tone the badge has to cast', () => {
+  // `TONE[type.tone as keyof typeof TONE]` was a cast over a tone the function
+  // typed as `string`, which is how a fourth tone would have reached the palette
+  // lookup and printed `undefined` as a colour.
+  const copy = typeVerdictCopy(verifyTypeTokens(roles, [{ screen: 'index', style: rendered() }]), true);
+  assert.ok(['ok', 'degraded', 'muted'].includes(copy.tone), `unexpected tone ${copy.tone}`);
 });

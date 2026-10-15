@@ -1,4 +1,5 @@
 import { REFERENCES, type CandidateProbe, type ObservedType } from './renderFidelity.ts';
+import type { BoardFrame } from './boardFrames.ts';
 
 /**
  * The browser half of the render verdict: gather facts, decide nothing.
@@ -24,9 +25,6 @@ import { REFERENCES, type CandidateProbe, type ObservedType } from './renderFide
  * figures whose default widths differ most between faces.
  */
 const TEST_STRING = 'Handgloves 0123 — the quick brown fox jumps';
-
-/** The computed style properties a `type.*` token can move. */
-const TYPE_STYLE = ['fontSize', 'lineHeight', 'letterSpacing', 'fontWeight'] as const;
 
 /**
  * One hidden span, reused.
@@ -127,9 +125,15 @@ export function probeFontCandidates(families: string[]): CandidateProbe[] {
  * nearest ancestor, so counting it would inflate every sample size with nodes that
  * say nothing about the type scale.
  *
+ * The four properties read below are `TYPE_PROPERTIES`, spelled out as an object
+ * literal because a dynamically-built one would lose the `ObservedType['style']`
+ * type that makes the decision function's reads safe. `test/mechanisms.test.ts`
+ * asserts the literal and the list still name the same four, so the shorthand
+ * cannot drift away from the list the way a second copy would.
+ *
  * `null` when there is no DOM, which the report renders as *not measured*.
  */
-export function observeTypeStyles(frames: { key: string; element: Element }[]): ObservedType[] | null {
+export function observeTypeStyles(frames: BoardFrame[]): ObservedType[] | null {
   if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return null;
 
   const observed: ObservedType[] = [];
@@ -159,7 +163,7 @@ const holdsText = (node: Element): boolean => {
 };
 
 /** How many back controls the board is showing, or null when it could not tell. */
-export function countBackControls(frames: { key: string; element: Element }[]): number | null {
+export function countBackControls(frames: BoardFrame[]): number | null {
   if (typeof document === 'undefined') return null;
   if (frames.length === 0) return null;
 
@@ -175,6 +179,3 @@ export function countBackControls(frames: { key: string; element: Element }[]): 
   }
   return count;
 }
-
-/** The properties this reader collects, named so the report can say what it read. */
-export const OBSERVED_PROPERTIES = TYPE_STYLE;
