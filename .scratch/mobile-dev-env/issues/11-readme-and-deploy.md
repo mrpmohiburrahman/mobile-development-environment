@@ -26,6 +26,8 @@ The spine hook now supplies the server snapshot that React requires during expor
 
 A browser check of the export showed the badge **in-memory only** and the toggle **no committed baseline**. Token edits changed the browser but not `tokens.json`. The browser reported no application errors or token-server requests.
 
+Clean runners load Expo types from the TypeScript configuration without generated files. The demo date helpers use UTC for the seed and labels. This prevents React error 418 when the build and browser use different timezones. Regression tests compare dates in five timezones.
+
 The README distinguishes the captured GIF font result from the current browser measurement. Neither defines a font baseline for other machines.
 
 The map item about the `state` tab on the deployed build stays open. This ticket ships the tab as it is.
