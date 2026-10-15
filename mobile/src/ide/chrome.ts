@@ -75,3 +75,31 @@ export type LabelSpec = {
  * appearance, and it stays put when the token moves.
  */
 export const CHROME_RADIUS = { sm: 10, md: 16, lg: 24, pill: 999 } as const;
+
+const FRAME_DROP_SHADOW = '0px 24px 60px rgba(0,0,0,0.55)';
+
+export function frameShadow(focused: boolean): string {
+  const ring = focused ? '0px 0px 0px 2px rgba(217,72,30,0.35)' : '0px 0px 0px 1px rgba(255,245,235,0.03)';
+  return `${ring}, ${FRAME_DROP_SHADOW}`;
+}
+
+export function chipStyle({
+  active,
+  pressed,
+  size,
+}: {
+  active: boolean;
+  pressed: boolean;
+  size: 'regular' | 'compact';
+}) {
+  return {
+    container: {
+      paddingVertical: size === 'compact' ? 3 : 5,
+      paddingHorizontal: size === 'compact' ? 8 : 12,
+      borderRadius: CHROME_RADIUS.pill,
+      backgroundColor: active ? '#D9481E' : CHROME.panel,
+      opacity: pressed ? 0.7 : 1,
+    },
+    textColor: active ? '#fff' : CHROME.textMuted,
+  };
+}

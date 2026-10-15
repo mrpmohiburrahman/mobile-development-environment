@@ -19,6 +19,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tokens from '../mobile/src/ds/tokens.json' with { type: 'json' };
 import { validateBoxShadow } from '../mobile/src/ds/tokenValidation.ts';
+import { frameShadow } from '../mobile/src/ide/chrome.ts';
 import {
   normalizeShadow,
   describeShadow,
@@ -170,19 +171,12 @@ test('the placeholder is the shipped value, not an invention', () => {
 // The chrome is not reachable from an elevation drag
 // ---------------------------------------------------------------------------
 
-test('the studio chrome keeps its own hardcoded shadow', () => {
-  // Ticket 04 is what guarantees this. Asserted rather than assumed, because the
-  // failure would be invisible until someone dragged the control.
-  const blueprint = read('mobile/src/ide/Blueprint.tsx');
-  const shadows = [...blueprint.matchAll(/boxShadow:\s*'([^']+)'/g)].map((m) => m[1]);
-  assert.ok(shadows.length > 0, 'expected the chrome to carry a hardcoded shadow');
-  for (const shadow of shadows) {
-    // Not one of the token values: the chrome is not reading elevation at all.
-    assert.ok(
-      !Object.values(tokens.elevation).includes(shadow as any),
-      'the chrome shadow came from the elevation tokens',
-    );
-    assert.equal(validateBoxShadow(shadow).ok, true, 'the chrome shadow should still be a valid shadow');
+test('frame focus changes only the ring of the fixed chrome shadow', () => {
+  assert.equal(frameShadow(false), '0px 0px 0px 1px rgba(255,245,235,0.03), 0px 24px 60px rgba(0,0,0,0.55)');
+  assert.equal(frameShadow(true), '0px 0px 0px 2px rgba(217,72,30,0.35), 0px 24px 60px rgba(0,0,0,0.55)');
+  for (const shadow of [frameShadow(false), frameShadow(true)]) {
+    assert.ok(!Object.values(tokens.elevation).includes(shadow));
+    assert.equal(validateBoxShadow(shadow).ok, true);
   }
 });
 

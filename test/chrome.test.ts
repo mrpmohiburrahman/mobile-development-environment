@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHROME, CHROME_RADIUS, LABEL_SPEC, TONE } from '../mobile/src/ide/chrome.ts';
+import { CHROME, CHROME_RADIUS, LABEL_SPEC, TONE, chipStyle } from '../mobile/src/ide/chrome.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -141,6 +141,70 @@ test('chrome radii are fixed, including the pill', () => {
   // reshaped the studio's own furniture.
   assert.equal(CHROME_RADIUS.pill, 999);
   assert.equal(new Set(Object.values(CHROME_RADIUS)).size, 4);
+});
+
+test('inactive regular chips retain their fixed chrome style', () => {
+  assert.deepEqual(chipStyle({ active: false, pressed: false, size: 'regular' }), {
+    container: {
+      paddingVertical: 5,
+      paddingHorizontal: 12,
+      borderRadius: 999,
+      backgroundColor: '#211C18',
+      opacity: 1,
+    },
+    textColor: '#9C928A',
+  });
+});
+
+test('active regular chips use the selected colors', () => {
+  assert.deepEqual(chipStyle({ active: true, pressed: false, size: 'regular' }), {
+    container: {
+      paddingVertical: 5,
+      paddingHorizontal: 12,
+      borderRadius: 999,
+      backgroundColor: '#D9481E',
+      opacity: 1,
+    },
+    textColor: '#fff',
+  });
+});
+
+test('pressed regular chips retain their colors at reduced opacity', () => {
+  for (const [active, backgroundColor, textColor] of [
+    [false, '#211C18', '#9C928A'],
+    [true, '#D9481E', '#fff'],
+  ] as const) {
+    assert.deepEqual(chipStyle({ active, pressed: true, size: 'regular' }), {
+      container: {
+        paddingVertical: 5,
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        backgroundColor,
+        opacity: 0.7,
+      },
+      textColor,
+    });
+  }
+});
+
+test('compact chips retain smaller padding in every selection and press state', () => {
+  for (const [active, pressed, backgroundColor, textColor, opacity] of [
+    [false, false, '#211C18', '#9C928A', 1],
+    [true, false, '#D9481E', '#fff', 1],
+    [false, true, '#211C18', '#9C928A', 0.7],
+    [true, true, '#D9481E', '#fff', 0.7],
+  ] as const) {
+    assert.deepEqual(chipStyle({ active, pressed, size: 'compact' }), {
+      container: {
+        paddingVertical: 3,
+        paddingHorizontal: 8,
+        borderRadius: 999,
+        backgroundColor,
+        opacity,
+      },
+      textColor,
+    });
+  }
 });
 
 test('mobile/src/ui is untouched by this decoupling', () => {
