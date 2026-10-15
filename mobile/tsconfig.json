@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "types": ["expo/types"],
     // Lets a module be written with an explicit `.ts` extension on its imports.
     // Metro resolves those happily, and so does `node --test`, which rejects the
     // extensionless form Metro allows. Without this, only modules with no runtime
