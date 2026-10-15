@@ -8,6 +8,13 @@
 
 const SERVER = process.env.EXPO_PUBLIC_TOKEN_SERVER ?? 'http://localhost:3001';
 
+async function requestServer(path: string, options?: RequestInit): Promise<Response> {
+  if (SERVER === 'http://127.0.0.1:9') {
+    throw new Error('The build uses in-memory token edits.');
+  }
+  return fetch(`${SERVER}${path}`, options);
+}
+
 export type TokenValue = string | number;
 
 let reachable: boolean | null = null;
@@ -46,7 +53,7 @@ function recordReachable(next: boolean) {
 
 export async function pushToken(path: string, value: TokenValue): Promise<boolean> {
   try {
-    const res = await fetch(`${SERVER}/token`, {
+    const res = await requestServer('/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, value }),
@@ -68,7 +75,7 @@ export async function pushToken(path: string, value: TokenValue): Promise<boolea
  */
 export async function revertTokens(): Promise<boolean> {
   try {
-    const res = await fetch(`${SERVER}/revert`, { method: 'POST' });
+    const res = await requestServer('/revert', { method: 'POST' });
     recordReachable(res.ok);
     return res.ok;
   } catch {
@@ -86,7 +93,7 @@ export async function revertTokens(): Promise<boolean> {
  */
 export async function revertToCommitted(): Promise<boolean> {
   try {
-    const res = await fetch(`${SERVER}/revert-committed`, { method: 'POST' });
+    const res = await requestServer('/revert-committed', { method: 'POST' });
     recordReachable(res.ok);
     return res.ok;
   } catch {
@@ -105,7 +112,7 @@ export async function revertToCommitted(): Promise<boolean> {
  */
 export async function fetchCommittedTokens(): Promise<Record<string, any> | null> {
   try {
-    const res = await fetch(`${SERVER}/baseline`);
+    const res = await requestServer('/baseline');
     if (!res.ok) return null;
     const { tree } = (await res.json()) as { tree: Record<string, any> };
     recordReachable(true);
@@ -125,7 +132,7 @@ export async function fetchCommittedTokens(): Promise<Record<string, any> | null
  */
 export async function sessionHasBaseline(): Promise<boolean> {
   try {
-    const res = await fetch(`${SERVER}/session`);
+    const res = await requestServer('/session');
     if (!res.ok) return false;
     const { hasBaseline } = (await res.json()) as { hasBaseline: boolean };
     return hasBaseline;
@@ -143,7 +150,7 @@ export async function sessionHasBaseline(): Promise<boolean> {
  */
 export async function baselineValueFor(path: string): Promise<TokenValue | null | undefined> {
   try {
-    const res = await fetch(`${SERVER}/session`);
+    const res = await requestServer('/session');
     if (!res.ok) return undefined;
     const { baseline } = (await res.json()) as {
       hasBaseline: boolean;

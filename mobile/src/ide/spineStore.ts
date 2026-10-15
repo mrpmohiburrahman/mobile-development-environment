@@ -41,7 +41,8 @@ import { createSpine, spineReducer, type PressFact, type RouteFact, type SpineIn
  * two live stores. The decisions it depends on all live in `spine.ts`, which is.
  */
 
-let state: SpineState = createSpine();
+const initialState: SpineState = createSpine();
+let state = initialState;
 let attached = false;
 /** How many callers are holding the subscriptions open. */
 let holders = 0;
@@ -184,7 +185,7 @@ export const recordRoute = (route: RouteFact) => dispatch({ kind: 'route', ...ro
 export const setPressListening = (isListening: boolean) => dispatch({ kind: 'listener', attached: isListening });
 
 /** The whole log, for the panels. Stable identity between changes. */
-export const useSpine = (): SpineState => useSyncExternalStore(subscribe, getSpineState);
+export const useSpine = (): SpineState => useSyncExternalStore(subscribe, getSpineState, () => initialState);
 
 /** The log outside React, for the board chrome. */
 export const getSpineState = (): SpineState => state;
