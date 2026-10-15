@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE — board edges, set 3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #3D332A; }
+  body { background: #F5F5F4; transition: background 200ms; }
+  body[data-theme="dark"] { background: #0B0E1A; color: #E6E9F5; }
+
+  #host { min-height: 100vh; overflow: auto; }
+  #legend {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 24px; font-size: 13px; border-bottom: 1px solid rgba(128,128,128,0.18);
+    background: rgba(245,245,244,0.92); backdrop-filter: blur(6px);
+  }
+  body[data-theme="dark"] #legend { background: rgba(11,14,26,0.92); }
+  #legend button, #switcher button {
+    font: inherit; font-size: 13px; border: 1px solid #D6D3D1; background: #fff; border-radius: 8px;
+    padding: 4px 12px; cursor: pointer; color: inherit;
+  }
+  body[data-theme="dark"] #legend button { background: #161A2E; border-color: #2A2E4A; }
+  #event-line { color: #78716C; }
+  #scale-label { margin-left: auto; color: #A8A29E; font-size: 12px; }
+
+  .board { position: relative; display: flex; gap: 32px; padding: 24px; align-items: flex-start; width: max-content; overflow: visible; }
+  #edge-layer { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; overflow: visible; font-family: inherit; }
+
+  .frame { width: 390px; flex: none; }
+  .frame-label { display: flex; align-items: center; gap: 8px; height: 30px; font-size: 13px; color: #78716C; }
+  .frame-label .chip {
+    width: 20px; height: 20px; border-radius: 999px; background: #1C1917; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+  }
+  body[data-theme="dark"] .frame-label .chip { background: #E6E9F5; color: #0B0E1A; }
+  .frame-label .rule { flex: 1; height: 1px; background: rgba(128,128,128,0.25); }
+
+  .phone { width: 390px; height: 820px; border-radius: 28px; overflow: hidden; border: 1px solid rgba(128,128,128,0.3); background: #FBFAF9; color: #3D332A; }
+  body[data-theme="dark"] .phone { background: #12152A; color: #E6E9F5; border-color: #2A2E4A; }
+
+  .phone-screen { padding: 18px; display: flex; flex-direction: column; gap: 12px; height: 100%; }
+  .status { display: flex; justify-content: space-between; font-size: 11px; color: #A8A29E; }
+  .h { font-weight: 600; font-size: 17px; letter-spacing: -0.01em; margin-top: 4px; }
+  .h.sm { font-size: 15px; }
+  .sk { height: 12px; border-radius: 6px; background: rgba(128,118,105,0.28); }
+  .sk.thin { height: 8px; opacity: 0.6; }
+  .card { border: 1px solid rgba(128,128,128,0.2); border-radius: 14px; padding: 12px; }
+  body[data-theme="dark"] .card { border-color: #2A2E4A; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .grow2 { flex: 1; }
+  .avatar { width: 34px; height: 34px; border-radius: 999px; background: rgba(128,118,105,0.4); flex: none; }
+  .avatar.big { width: 56px; height: 56px; }
+  .center { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .name { font-weight: 500; font-size: 13px; }
+  .chev { color: #A8A29E; }
+  .check { width: 20px; height: 20px; border-radius: 999px; background: #16A34A; color: #fff; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .field { height: 42px; border-radius: 10px; border: 1px solid rgba(128,128,128,0.3); }
+  .btn { border-radius: 10px; border: 1px solid rgba(128,128,128,0.3); padding: 10px; text-align: center; font-size: 13px; font-weight: 500; }
+  .btn.warm { background: #C2410C; border-color: #C2410C; color: #fff; }
+  .chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding: 10px; border: 1px solid rgba(128,128,128,0.2); border-radius: 14px; }
+  .col { flex: 1; background: #C2410C; border-radius: 6px 6px 2px 2px; opacity: 0.7; }
+  .ring { width: 120px; height: 120px; border-radius: 999px; border: 10px solid rgba(194,65,12,0.75); display: flex; align-items: center; justify-content: center; margin: 8px auto; }
+  .ring span { font-size: 28px; font-weight: 600; }
+  .back { font-size: 13px; color: #78716C; }
+  .toggle { width: 40px; height: 24px; border-radius: 999px; background: rgba(128,128,128,0.35); position: relative; flex: none; }
+  .toggle i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 999px; background: #fff; }
+  .toggle.on { background: #16A34A; } .toggle.on i { left: 19px; }
+  .tabs { margin-top: auto; display: flex; justify-content: space-around; padding-top: 10px; border-top: 1px solid rgba(128,128,128,0.2); }
+  .tabs i { width: 18px; height: 18px; border-radius: 5px; background: rgba(128,118,105,0.45); }
+
+  #switcher {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; z-index: 50;
+    background: #1C1917; color: #F5F5F4; border-radius: 999px; padding: 6px 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3); font-size: 13px;
+  }
+  #switcher button { background: transparent; border: 1px solid #57534E; color: inherit; border-radius: 999px; width: 28px; height: 28px; padding: 0; }
+</style>
+</head>
+<body data-theme="light">
+  <div id="host"></div>
+  <script src="./set3.js"></script>
+</body>
+</html>
