@@ -85,7 +85,11 @@ The studio assumes the render on screen is the render that was designed. The hea
 
 It probes which family actually won the display font stack by rendering a test string in each candidate and in two known-different references, and comparing widths. Every candidate is named with its fate — present, fell through, or unmeasured — and an unanswerable one is never reported as fine. It then checks the `type.*` tokens against the computed styles of the text on the real screens, and reports how many screens and how many properties it compared.
 
-**Measured answer: no, not today.** The display stack names two families ahead of the system fallbacks. Neither is installed on the machine this was written on, no font face is declared anywhere in the app, and the type tokens carry no font family at all — so the stack resolves to the system face here, to a different face on a machine that has the named family, and to a third on Linux. Three machines, three rasters, one committed tree.
+**Measured answer: no, not today.** The display stack names two families ahead of the system fallbacks: `Spline Sans`, then `Inter`. The measurement found one of them. `Spline Sans` is absent. `Inter` is present, and this repository does not ship it.
+
+The app declares no font face. Nothing imports the font package. The type tokens carry no font family. So the `Inter` that wins came from the machine, not from the commit. No font directory lists it either. It sits in a file inside an unrelated application bundle. Three independent measurements had to agree before the studio believed that answer.
+
+That is a stronger finding than the one predicted, not a weaker one. The plan said both families would be absent and was half right. Either way, the stack resolves to one face here, to a different face on a machine without `Inter`, and to a third on Linux. Three machines, three rasters, one committed tree. The header prints the face it found, so the answer changes on the day a web font ships.
 
 That is the claim the board's header is making when it prints this line.
 
