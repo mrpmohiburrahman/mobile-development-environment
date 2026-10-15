@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import { useHabits } from '../store/habits';
 import { formatPath, describeLog, type SpineEntry } from './spine';
+import { habitNameForPath } from './habitLabels';
 import { isSpineAttached, useSpine } from './spineStore';
 import { CHROME, TONE } from './chrome';
 import { pressVerdictCopy } from './presses';
@@ -60,8 +61,14 @@ function Node({ label, value, depth = 0 }: { label: string; value: unknown; dept
  * judged — three facts side by side, with **no arrow between them**. The change
  * usually repaints a different frame than the one pressed, so a drawn connection
  * would be a guess wearing a cause's clothing.
+ *
+ * `habits` is passed in so a path can be named. `habits[2].done[0]` says where the
+ * change landed and nothing a reader can act on: the tree below holds six habits,
+ * and finding "2" in it means counting. Naming the habit beside the path is what
+ * makes the row findable, which is the whole reason to watch a change rather than
+ * re-read a tree.
  */
-function Row({ entry }: { entry: SpineEntry }) {
+function Row({ entry, habits }: { entry: SpineEntry; habits: { name: string }[] }) {
   const verdict = entry.verdict ? pressVerdictCopy(entry.verdict) : null;
   const tone = verdict?.tone ?? (entry.changes.length > 0 ? TONE.ok : CHROME.textMuted);
 
@@ -82,11 +89,19 @@ function Row({ entry }: { entry: SpineEntry }) {
       </View>
 
       {entry.changes.flatMap((change) =>
-        change.differences.map((diff) => (
-          <Label key={`${change.store}-${diff.path}`} role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }} numberOfLines={1}>
-            {change.store} {formatPath(diff.path)}: {JSON.stringify(diff.baseline)} → {JSON.stringify(diff.current)}
-          </Label>
-        )),
+        change.differences.map((diff) => {
+          // Named where the studio can name it, and left unnamed where it cannot.
+          // A habit's name is resolved against the list as it is *now*, so a habit
+          // renamed since the row was logged would print the new name — which is
+          // why a name it cannot resolve is dropped rather than guessed at.
+          const name = habitNameForPath(diff.path, habits);
+          return (
+            <Label key={`${change.store}-${diff.path}`} role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }} numberOfLines={1}>
+              {change.store} {formatPath(diff.path)}: {JSON.stringify(diff.baseline)} → {JSON.stringify(diff.current)}
+              {name ? <Label role="caption" color={CHROME.text}>  · {name}</Label> : null}
+            </Label>
+          );
+        }),
       )}
 
       {entry.route ? (
@@ -159,7 +174,7 @@ export function StatePanel() {
       {rows.length > 0 ? (
         <View style={{ gap: 2 }}>
           {rows.map((entry) => (
-            <Row key={`${entry.seq}-${entry.press?.target ?? ''}-${entry.route?.to ?? ''}`} entry={entry} />
+            <Row key={`${entry.seq}-${entry.press?.target ?? ''}-${entry.route?.to ?? ''}`} entry={entry} habits={habits} />
           ))}
         </View>
       ) : null}
