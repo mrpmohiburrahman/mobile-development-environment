@@ -90,8 +90,6 @@
 .mp-canvas-controls button { min-width: 44px; justify-content: center; font-size: 12px; padding: 6px 10px; box-shadow: 0 2px 8px #23332e14; }
 .mp-flybar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 2px 8px #23332e14; }
 .mp-flybar button { min-height: 28px; padding: 4px 10px; font-size: 11px; border-color: transparent; }
-.mp-flybar-overview { font-weight: 600; }
-.mp-flybar-divider { width: 1px; height: 18px; margin: 0 2px; background: var(--border); }
 .mp-inspector { width: 282px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid var(--border); background: var(--surface); padding: 20px 16px; }
 .mp-inspector-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .mp-inspector h2 { margin: 0; font-size: 13px; font-weight: 600; }

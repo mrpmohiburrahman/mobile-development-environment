@@ -15,7 +15,7 @@ This ticket records the implementation of the accepted board-edges design from t
 - Screen frames move when the user drags the frame header or footer. A grip icon appears on hover or focus only.
 - Keyboard users can focus a frame header and press arrow keys to move the frame. `Shift` increases the step size. `Home` restores the frame to its declared position. `Enter` centers the camera on the frame.
 - Interacted frames rise to the top of the z-order. Dropping or stepping a frame onto another frame header nudges the moved frame down so both drag handles stay reachable.
-- Overview buttons appear in two places: the top fly bar and the bottom-right canvas controls.
+- Fit in the bottom-right zoom cluster is the single camera-only action. The `0` key does the same. Reset layout restores frame positions and the camera together.
 - `scripts/guard.sh` names `mobile/src/app/ide.tsx` and `mobile/src/ui/index.tsx` as the two exceptions to the byte-identical rule.
 
 ## Verification

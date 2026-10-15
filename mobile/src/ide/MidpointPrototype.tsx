@@ -362,12 +362,20 @@ export function MidpointPrototype() {
     setObserved(new Set()); setActivity([]); setExtra([]); setSelected(0);
     setMessage('No route observed. Use an app control or preview a connection.');
   };
+  // Reset layout restores both halves of the board arrangement: where the frames
+  // sit and where the camera looks. A reset that only moved frames looked dead
+  // after a pan or zoom, because the button stayed disabled while the view was
+  // off. `flyTo(null)` animates the camera home and the fit effect re-runs once
+  // the cleared positions change the bounds.
+  const layoutDirty = movedCount > 0 || !fitMode;
   const resetLayout = () => {
     frameDrag.current = null;
     setDragged(null);
     setPositions({});
-    setFitMode(true);
-    setMessage('Frame positions restored to the declared board layout.');
+    flyTo(null);
+    setMessage(movedCount > 0
+      ? 'Frame positions and camera restored to the declared board layout.'
+      : 'Camera restored to the board overview.');
   };
 
   // Board pan: any press that is not on a live app control, a drag handle, or the
@@ -490,7 +498,7 @@ export function MidpointPrototype() {
         <a className="mp-brand" href="/ide"><span className="mp-brand-icon">S</span><span>Streak Studio</span></a>
         <span className="mp-header-divider" />
         <div className="mp-heading"><h1>Navigation blueprint</h1><span>Canvas prototype · real app screens · drag frames · pan and zoom</span></div>
-        <div className="mp-header-actions"><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={Object.keys(positions).length === 0}>Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
+        <div className="mp-header-actions"><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
       </header>
 
       <section className="mp-toolbar" aria-label="Prototype controls">
@@ -559,16 +567,13 @@ export function MidpointPrototype() {
             </div>}
 
             <div className="mp-canvas-controls">
-              <button type="button" onClick={() => flyTo(null)}>Overview</button>
               <button type="button" aria-label="Zoom out" onClick={(e) => zoomAt(e.clientX, e.clientY, 1 / 1.25)}>−</button>
               <button type="button" aria-label="Zoom to 100%" onClick={(e) => { const el = viewport.current; if (!el || !view) return; const rect = el.getBoundingClientRect(); zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / view.k); }}>{Math.round(k * 100)}%</button>
               <button type="button" aria-label="Zoom in" onClick={(e) => zoomAt(e.clientX, e.clientY, 1.25)}>+</button>
-              <button type="button" onClick={() => { setFitMode(true); fitView(); }}>Fit</button>
+              <button type="button" aria-pressed={fitMode} title="Fit the whole board in view" onClick={() => flyTo(null)}>Fit</button>
             </div>
 
             <div className="mp-flybar" role="group" aria-label="Fly to screen">
-              <button type="button" className="mp-flybar-overview" aria-pressed={fitMode} onClick={() => flyTo(null)}>Overview</button>
-              <span className="mp-flybar-divider" aria-hidden="true" />
               {screens.map(({ key, label }) => <button type="button" key={key} onClick={() => flyTo(key)}>{label}</button>)}
             </div>
           </div>
@@ -578,7 +583,7 @@ export function MidpointPrototype() {
       </div>
 
       <section className="mp-status" aria-live="polite"><span className={last?.mode === 'live' ? 'mp-status-live' : 'mp-status-label'}>{last ? last.mode === 'live' ? 'OBSERVED' : 'PREVIEW' : 'READY'}</span><span>{message}</span><small>{allObserved.size} observed · {routes.length} visible · {gapCopy.label} · {includeTabs ? 'tab routes included' : `${TAB_ROUTES.length} tab routes hidden`}{movedCount > 0 ? ` · ${movedCount} frame${movedCount === 1 ? '' : 's'} moved` : ''}</small></section>
-      <footer className="mp-footer"><p className="mp-footer-hint">Drag a screen header or footer, or focus a header and press arrow keys, to move that frame. Drag empty board space to move the board. Hold <kbd>Shift</kbd> to lock one axis or step further. Press <kbd>Esc</kbd> to cancel a move.</p><div className="mp-preview-controls"><label className="mp-action-select">Try a connection<select aria-label="Preview route" value={Math.min(selected, routes.length - 1)} onChange={(e) => setSelected(Number(e.target.value))}>{routes.map((r, i) => <option key={keyOf(r)} value={i}>{labelOf(r.from)} → {labelOf(r.to)} · {r.action}</option>)}</select></label><button type="button" className="mp-primary" onClick={() => selectedRoute && preview(selectedRoute)}>Preview →</button><button type="button" onClick={() => { const from = last?.to ?? 'habit'; record(from, 'back', undefined, 'preview'); }}>Back</button></div></footer>
+      <footer className="mp-footer"><p className="mp-footer-hint">Drag a screen header or footer, or focus a header and press arrow keys, to move that frame. Drag empty board space to move the board. <kbd>Shift</kbd> locks one axis. <kbd>Esc</kbd> cancels a move. <kbd>0</kbd> fits the whole board. Reset layout restores frames and camera.</p><div className="mp-preview-controls"><label className="mp-action-select">Try a connection<select aria-label="Preview route" value={Math.min(selected, routes.length - 1)} onChange={(e) => setSelected(Number(e.target.value))}>{routes.map((r, i) => <option key={keyOf(r)} value={i}>{labelOf(r.from)} → {labelOf(r.to)} · {r.action}</option>)}</select></label><button type="button" className="mp-primary" onClick={() => selectedRoute && preview(selectedRoute)}>Preview →</button><button type="button" onClick={() => { const from = last?.to ?? 'habit'; record(from, 'back', undefined, 'preview'); }}>Back</button></div></footer>
     </main>
   );
 }

@@ -138,3 +138,11 @@ Chosen design: the Contour midpoint board with the Guide camera model (`mobile/s
 - Interacted frames rise to the top of the z-order. Dropping or stepping a frame onto another frame header nudges the moved frame down by one header height so both drag handles stay reachable.
 - `scripts/guard.sh` names `mobile/src/app/ide.tsx` and `mobile/src/ui/index.tsx` as the two explicit exceptions to the byte-identical rule.
 
+### Refinement: Reset layout scope
+
+The user reported that Reset layout did not work. Browser reproduction showed that the button restored dragged frames correctly but stayed disabled after a pan, a zoom, or a fly-to. The button covered frame positions only. Confirmed changes:
+
+- Reset layout now restores frame positions and the camera. It is active when a frame moved or the camera left the overview.
+- The two Overview buttons are gone. Fit in the zoom cluster is the single camera-only action. It displays the pressed state while the camera is in overview. The `0` key does the same.
+- The fly bar holds screen names only.
+
