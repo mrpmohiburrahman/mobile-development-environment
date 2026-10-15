@@ -14,7 +14,7 @@
 //
 // Run: node --experimental-strip-types --test test/*.test.ts
 
-import { test, before, after } from 'node:test';
+import { test, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -116,6 +116,27 @@ test('revert reports reachability too, so a server that dies on revert is caught
   assert.deepEqual(seen, [false]);
 
   unsubscribe();
+});
+
+test('the read-only export never calls fetch, including writes and undo', async () => {
+  const previous = process.env.EXPO_PUBLIC_TOKEN_SERVER;
+  process.env.EXPO_PUBLIC_TOKEN_SERVER = 'http://127.0.0.1:9';
+  const fetchMock = mock.method(globalThis, 'fetch', async () => new Response('{}'));
+  try {
+    const client = await fresh('read-only');
+    assert.equal(await client.pushToken('color.light.accent', '#FF0000'), false);
+    assert.equal(await client.revertTokens(), false);
+    assert.equal(await client.revertToCommitted(), false);
+    assert.equal(await client.fetchCommittedTokens(), null);
+    assert.equal(await client.sessionHasBaseline(), false);
+    assert.equal(await client.baselineValueFor('color.light.accent'), undefined);
+    assert.equal(client.serverIsReachable(), false);
+    assert.equal(fetchMock.mock.callCount(), 0);
+  } finally {
+    fetchMock.mock.restore();
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_TOKEN_SERVER;
+    else process.env.EXPO_PUBLIC_TOKEN_SERVER = previous;
+  }
 });
 
 test('the snapshot is a primitive, so it is safe to compare by identity', async () => {

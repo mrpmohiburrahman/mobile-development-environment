@@ -15,12 +15,13 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.argv[2] ? resolve(process.argv[2]) : resolve(REPO, 'dist');
 const HOST = process.env.HOST ?? '127.0.0.1';
 const PORT = Number(process.env.PORT ?? 8080);
+const BASE_PATH = process.env.EXPO_BASE_URL ?? '';
 
 if (!existsSync(resolve(ROOT, 'index.html'))) {
   console.error(`no export at ${ROOT}. Run \`npm run export:web\` first.`);
   process.exit(1);
 }
 
-createStaticServer(ROOT).listen(PORT, HOST, () => {
-  console.log(`read-only web  →  http://${HOST}:${PORT}/ide`);
+createStaticServer(ROOT, BASE_PATH).listen(PORT, HOST, () => {
+  console.log(`read-only web  →  http://${HOST}:${PORT}${BASE_PATH.replace(/\/$/, '')}/ide`);
 });

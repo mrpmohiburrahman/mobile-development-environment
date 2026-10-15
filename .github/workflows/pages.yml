@@ -2,8 +2,8 @@ name: pages
 
 # Publishes the read-only web export to GitHub Pages.
 #
-# The export bakes a token-server URL on port 9, which browsers block. So the
-# public build edits tokens in memory and writes nothing.
+# The read-only client refuses token-server requests before fetch. The public
+# build edits tokens in memory and writes nothing.
 #
 # Pages serves this repository from /<repo-name>, so the export sets
 # EXPO_BASE_URL to that subpath. Local builds leave it unset.
@@ -12,7 +12,6 @@ name: pages
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -38,6 +39,28 @@ jobs:
       - name: Install the app
         working-directory: mobile
         run: npm ci
+
+      - name: Verify the app tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "Missing deployment base revision." >&2
+            exit 1
+          fi
+          bash scripts/guard.sh "$before...HEAD"
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        working-directory: mobile
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npx tsc --noEmit
 
       - name: Export the read-only build
         env:

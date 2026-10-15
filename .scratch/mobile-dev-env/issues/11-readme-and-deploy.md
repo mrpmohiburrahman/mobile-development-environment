@@ -18,8 +18,14 @@ The README embeds two GIFs from a real edit. `docs/media/edit-loop.gif` shows th
 
 The public deploy is GitHub Pages at `https://mrpmohiburrahman.github.io/mobile-development-environment/ide`. `.github/workflows/pages.yml` builds it on every push to `main`. `mobile/app.config.js` sets the Pages subpath only when the build sets `EXPO_BASE_URL`, so local `expo start` stays at the root.
 
-`npm run export:web` bakes `EXPO_PUBLIC_TOKEN_SERVER=http://127.0.0.1:9`. Browsers block port 9, so every write fails at once. The script fails if the bundle still holds `localhost:3001`. `npm run preview` serves `dist/` locally and refuses all methods except `GET` and `HEAD`. `test/staticFiles.test.ts` covers the preview server.
+`npm run export:web` sets `EXPO_PUBLIC_TOKEN_SERVER=http://127.0.0.1:9`. The client treats that address as read-only and makes no server requests. Metro removes the unused fetch branch. The script rejects incomplete server rendering, missing route assets, and a bundle that still holds `localhost:3001`.
 
-A browser check of the export showed the badge **in-memory only** and the toggle **no committed baseline**. The check passed at the root and under the Pages subpath.
+`npm run preview` serves `dist/` locally and refuses all methods except `GET` and `HEAD`. It supports the Pages subpath through `EXPO_BASE_URL`. It refuses paths and symlinks outside the export directory. `test/staticFiles.test.ts` covers the preview server.
+
+The spine hook now supplies the server snapshot that React requires during export. Its absence caused React error 419. The export check rejects that incomplete HTML before deployment.
+
+A browser check of the export showed the badge **in-memory only** and the toggle **no committed baseline**. Token edits changed the browser but not `tokens.json`. The browser reported no application errors or token-server requests.
+
+The README distinguishes the captured GIF font result from the current browser measurement. Neither defines a font baseline for other machines.
 
 The map item about the `state` tab on the deployed build stays open. This ticket ships the tab as it is.

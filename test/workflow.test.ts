@@ -111,6 +111,22 @@ test('the guard triggers on pull requests and pushes, like the attribution check
   }
 });
 
+test('Pages verifies the code and export before upload', () => {
+  const pages = readFileSync(join(ROOT, '.github/workflows/pages.yml'), 'utf8');
+  const upload = pages.indexOf('actions/upload-pages-artifact@');
+  assert.ok(upload > 0);
+  for (const command of ['bash scripts/guard.sh', 'npm test', 'npm run lint', 'npx tsc --noEmit', 'npm run export:web']) {
+    const index = pages.indexOf(command);
+    assert.ok(index > 0 && index < upload, `${command} must precede upload`);
+  }
+  assert.match(pages, /fetch-depth:\s*0/);
+  assert.match(pages, /needs:\s*build/);
+  assert.doesNotMatch(pages, /workflow_dispatch/);
+  assert.match(pages, /Missing deployment base revision\.[\s\S]*?exit 1/);
+  const exporter = readFileSync(join(ROOT, 'scripts/export-web.sh'), 'utf8');
+  assert.match(exporter, /node scripts\/verify-web\.mjs dist/);
+});
+
 test('the guard script is executable and starts with a shebang', () => {
   // `npm run guard` and any direct ./scripts/guard.sh both depend on this.
   const script = readFileSync(join(ROOT, 'scripts/guard.sh'), 'utf8');

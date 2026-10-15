@@ -6,7 +6,7 @@
 // server.
 
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
 
 const TYPES = {
@@ -29,7 +29,7 @@ const TYPES = {
   '.webp': 'image/webp',
 };
 
-const isInside = (root, absolutePath) => absolutePath === root || absolutePath.startsWith(root + sep);
+const isInside = (root, absolutePath) => absolutePath === root || absolutePath.startsWith(root.endsWith(sep) ? root : root + sep);
 
 /**
  * The file for a request path, or null when the path is missing, has a bad
@@ -37,23 +37,40 @@ const isInside = (root, absolutePath) => absolutePath === root || absolutePath.s
  */
 export async function resolveStatic(root, urlPath) {
   let decoded;
+  let absoluteRoot;
   try {
     decoded = decodeURIComponent(urlPath.split('?')[0]);
+    absoluteRoot = await realpath(root);
   } catch {
     return null;
   }
   const rel = decoded.replace(/^\/+/, '');
-  const base = resolve(root, rel);
-  if (!isInside(root, base)) return null;
-  const candidates = rel === '' ? [join(root, 'index.html')] : [base, `${base}.html`, join(base, 'index.html')];
+  const base = resolve(absoluteRoot, rel);
+  if (!isInside(absoluteRoot, base)) return null;
+  const candidates = rel === '' ? [join(absoluteRoot, 'index.html')] : [base, `${base}.html`, join(base, 'index.html')];
   for (const file of candidates) {
+    if (!isInside(absoluteRoot, file)) return null;
     try {
-      if ((await stat(file)).isFile()) return file;
+      const absoluteFile = await realpath(file);
+      if (!isInside(absoluteRoot, absoluteFile)) return null;
+      if ((await stat(absoluteFile)).isFile()) return absoluteFile;
     } catch {
       // Not this candidate. Try the next one.
     }
   }
   return null;
+}
+
+function normalizeBasePath(basePath) {
+  if (basePath === '' || basePath === '/') return '';
+  if (typeof basePath !== 'string' || !basePath.startsWith('/') || /[^A-Za-z0-9._~/-]/.test(basePath)) {
+    throw new TypeError('Invalid base path.');
+  }
+  const prefix = basePath.replace(/\/$/, '');
+  if (prefix.slice(1).split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    throw new TypeError('Invalid base path.');
+  }
+  return prefix;
 }
 
 const text = (res, code, body, headers = {}) => {
@@ -62,14 +79,20 @@ const text = (res, code, body, headers = {}) => {
 };
 
 /** An HTTP server that sends files from `root`. The caller starts it. */
-export function createStaticServer(root) {
+export function createStaticServer(root, basePath = '') {
   const absoluteRoot = resolve(root);
+  const prefix = normalizeBasePath(basePath);
   return createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       text(res, 405, 'read-only', { Allow: 'GET, HEAD' });
       return;
     }
-    const file = await resolveStatic(absoluteRoot, req.url ?? '/');
+    const urlPath = (req.url ?? '/').split('?')[0];
+    if (prefix && urlPath !== prefix && !urlPath.startsWith(prefix + '/')) {
+      text(res, 404, 'not found');
+      return;
+    }
+    const file = await resolveStatic(absoluteRoot, urlPath.slice(prefix.length) || '/');
     if (!file) {
       text(res, 404, 'not found');
       return;
