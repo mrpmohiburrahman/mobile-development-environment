@@ -69,6 +69,13 @@ test('a frame that mounted is found, and keyed by the board own key', () => {
   assert.equal(resolved.frames[0].element.id, 'screen-index');
 });
 
+test('comparison inventory reads only comparison frames', () => {
+  const host = fakeHost({ current: KEYS, baseline: ['habit'] });
+  const result = resolveFrames(host, KEYS, 'comparison');
+  assert.deepEqual(result.frames.map((frame) => frame.element.id), ['base-habit']);
+  assert.deepEqual(result.missing, ['index', 'settings']);
+});
+
 test('a frame that did not mount is reported as missing, not skipped', () => {
   // The zero-count rule. A reader that found some frames and silently omitted the
   // rest would let a panel report a complete-looking comparison over a partial

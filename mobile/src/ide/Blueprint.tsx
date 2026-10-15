@@ -3,15 +3,15 @@ import { ScrollView, View } from 'react-native';
 import { DesigningProvider } from './designing';
 import { screens } from './screens';
 import { TokensFrom } from '../ds/store';
-import { CHROME, CHROME_RADIUS, TONE } from './chrome';
+import { CHROME, CHROME_RADIUS, TONE, frameShadow } from './chrome';
 import { useCommittedTokens } from './BaselinePanel';
 import { DiskBadge } from './DiskBadge';
 import { Label } from './Label';
 import { clipTarget, describePresses } from './presses';
-import { tallyPresses } from './spine';
-import { recordPress, useSpine } from './spineStore';
+import { recordPress, setPressListening, useSpine } from './spineStore';
 import { RenderVerdictBadge } from './RenderVerdict';
-import { frameSelector, parseFrameId } from './boardFrames';
+import { ControlInventoryBadge } from './ControlInventoryBadge';
+import { frameId, frameSelector, parseFrameId } from './boardFrames';
 
 /**
  * How a press listener finds the frame it landed in.
@@ -32,28 +32,34 @@ const PHONE = { width: 390, height: 820 };
 /**
  * One screen, constrained to a phone aspect ratio and labelled.
  *
- * `nativeID` is how ticket 10 pairs the two columns' nodes, and it is used rather
- * than a `data-screen-key` prop because RNW filters unknown props off `View` —
- * `data-*` silently never reached the DOM, and a pairing that quietly finds
+ * `nativeID` is how the drift walk pairs the two columns' nodes, and it is used
+ * rather than a `data-screen-key` prop because RNW filters unknown props off `View`
+ * — `data-*` silently never reached the DOM, and a pairing that quietly finds
  * nothing is worse than no pairing at all. `nativeID` maps to a real DOM id.
- * The id embeds the same stable key `screens.ts` uses, so pairing does not depend
- * on frame order surviving a re-render.
+ *
+ * The id comes from `frameId`, the same function the three walks resolve with, so
+ * the board cannot build an id the walks do not look for. It embeds the stable key
+ * `screens.ts` uses, so pairing does not depend on frame order surviving a
+ * re-render.
  */
 function ScreenFrame({
   index,
   label,
   screenKey,
   baseline = false,
+  focused = false,
   children,
 }: {
   index: number;
   label: string;
   screenKey: string;
   baseline?: boolean;
+  /** Highlighted because the route panel is showing this frame's connections. */
+  focused?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <View nativeID={baseline ? `base-${screenKey}` : `screen-${screenKey}`} style={{ gap: 8 }}>
+    <View nativeID={frameId(screenKey, baseline)} style={{ gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View
           style={{
@@ -68,7 +74,7 @@ function ScreenFrame({
             {index}
           </Label>
         </View>
-        <Label role="label" color={CHROME.textMuted}>
+        <Label role="label" color={focused ? '#D9481E' : CHROME.textMuted}>
           {label}
         </Label>
         <View style={{ flex: 1, height: 1, backgroundColor: CHROME.border }} />
@@ -80,9 +86,14 @@ function ScreenFrame({
           borderRadius: 30,
           overflow: 'hidden',
           backgroundColor: CHROME.bg,
-          borderWidth: 1,
-          borderColor: CHROME.border,
-          boxShadow: '0px 0px 0px 1px rgba(255,245,235,0.03), 0px 24px 60px rgba(0,0,0,0.55)',
+          // The highlight is the panel's selection made visible on the board, so a
+          // reader who picks a frame in the list can find it in a row of seven. It
+          // is chrome around the artboard and never a style inside it: the render
+          // verdict measures what is inside, and a highlight that moved a token
+          // would move the measurement it exists to check.
+          borderWidth: focused ? 2 : 1,
+          borderColor: focused ? '#D9481E' : CHROME.border,
+          boxShadow: frameShadow(focused),
         }}>
         {children}
       </View>
@@ -91,16 +102,19 @@ function ScreenFrame({
 }
 
 /**
- * How many of the board's controls do something.
+ * How many observed board presses changed something.
  *
- * The count lives in the chrome so nobody has to click around the board with a
- * tally to find out. The wording is the important half: "inert **in the studio**"
- * rather than broken, and the measurement is the label while the caveat is the
- * detail, so a long caveat cannot be mistaken for a long accusation.
+ * This count covers observed presses, not distinct controls. The inventory shows
+ * control declarations before any press. Both reports name the studio's limits.
+ *
+ * Read off `spine.tally` rather than re-counted from `spine.entries`: the entries
+ * are a ring, so a tally taken from them shrinks when the cap evicts a row, and a
+ * number that moves without anything happening is not a measurement. The tally is
+ * accumulated at commit and survives eviction; `dropped` says what the ring lost.
  */
 function PressBadge() {
   const spine = useSpine();
-  const report = describePresses(tallyPresses(spine.entries));
+  const report = describePresses(spine.tally, spine.pressListening);
 
   return (
     <View style={{ gap: 2, maxWidth: 560 }}>
@@ -109,6 +123,7 @@ function PressBadge() {
       </Label>
       <Label role="caption" color={CHROME.textMuted} numberOfLines={2}>
         {report.detail}
+        {spine.dropped > 0 ? ` ${spine.dropped} older row${spine.dropped === 1 ? '' : 's'} left the ring; the count still includes them.` : ''}
       </Label>
     </View>
   );
@@ -121,8 +136,12 @@ function PressBadge() {
  * `TokensFrom`. Both columns use the same screen components, which is the whole
  * basis of the comparison — a baseline rendered with different components would
  * prove nothing. The two trees differ only in their tokens.
+ *
+ * `focus` is the frame the route panel is showing connections for. Owned by the
+ * route, not by either side: the panel picks it and the board draws it, and neither
+ * is the other's child.
  */
-export function Blueprint({ comparing = false }: { comparing?: boolean }) {
+export function Blueprint({ comparing = false, focus = null }: { comparing?: boolean; focus?: string | null }) {
   const [scale, setScale] = useState(0.5);
   const workspaceRef = useRef<View>(null);
 
@@ -166,7 +185,13 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
   const labels = useRef(new Map(screens.map((s) => [s.key, s.label])));
   useEffect(() => {
     const node = workspaceRef.current as unknown as HTMLElement | null;
-    if (!node?.addEventListener) return;
+    // Reported rather than assumed. With no node there is no listener, and a badge
+    // that printed "nothing has been pressed yet" over a reader that never ran
+    // would be the honest-zero failure wearing a press badge.
+    if (!node?.addEventListener) {
+      setPressListening(false);
+      return;
+    }
 
     const handle = (event: MouseEvent) => {
       const target = event.target as Element | null;
@@ -189,7 +214,11 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
     };
 
     node.addEventListener('click', handle, true);
-    return () => node.removeEventListener('click', handle, true);
+    setPressListening(true);
+    return () => {
+      node.removeEventListener('click', handle, true);
+      setPressListening(false);
+    };
   }, []);
 
   return (
@@ -209,9 +238,9 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
         <DiskBadge />
       </View>
 
-      {/* Two things the board can say about itself, both measured rather than
-          assumed, both placed next to the claim they qualify. */}
+      {/* Board reports separate control declarations from observed presses and rendered styles. */}
       <View style={{ paddingHorizontal: 24, paddingTop: 10, gap: 8 }}>
+        <ControlInventoryBadge host={workspaceRef} comparing={Boolean(baseline)} />
         <PressBadge />
         <RenderVerdictBadge host={workspaceRef} />
       </View>
@@ -227,7 +256,7 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
               transformOrigin: 'top left',
             }}>
             {screens.map(({ key, label, Component }, i) => (
-              <ScreenFrame key={key} index={i + 1} label={label} screenKey={key}>
+              <ScreenFrame key={key} index={i + 1} label={label} screenKey={key} focused={focus === key}>
                 {/* Inside the artboard every screen is in "designing" mode, so a
                     tap renders inline instead of navigating the whole board away.
                     The frame's key travels with it, so a route change and a press

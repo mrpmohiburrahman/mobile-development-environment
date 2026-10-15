@@ -25,10 +25,14 @@
  * answer carries `found`, `asked` and `missing`, and no caller can report a
  * comparison over fewer frames than the board has without it showing.
  *
- * Pure, and no runtime imports, so `test/boardFrames.test.ts` can load it. It
- * reaches the DOM only through the host it is handed, which is also what lets the
- * test drive it with an object that resolves a given set of ids.
+ * Pure, and no runtime imports — the one import here is `import type`, which the
+ * bundler and the type-stripping test runner both erase — so
+ * `test/boardFrames.test.ts` can load it. It reaches the DOM only through the host
+ * it is handed, which is also what lets the test drive it with an object that
+ * resolves a given set of ids.
  */
+
+import type { Column } from './spine.ts';
 
 /** The id prefix of a frame in the current column, from `ScreenFrame`'s `nativeID`. */
 export const FRAME_PREFIX = 'screen-';
@@ -36,7 +40,15 @@ export const FRAME_PREFIX = 'screen-';
 /** The id prefix of a frame in the comparison column. */
 export const BASELINE_PREFIX = 'base-';
 
-/** The DOM id of one frame. The board builds its ids here and nowhere else. */
+/**
+ * The DOM id of one frame. The board builds its ids here and nowhere else.
+ *
+ * "Here and nowhere else" is a claim about `Blueprint.tsx` as much as about this
+ * file: the frame component takes its `nativeID` from this function rather than
+ * from its own template literal, so a prefix renamed in one place cannot leave the
+ * board's ids and the walks that look for them disagreeing. That disagreement is
+ * silent — the walk finds zero frames and the panel reads as an un-run comparison.
+ */
 export const frameId = (key: string, baseline = false): string =>
   `${baseline ? BASELINE_PREFIX : FRAME_PREFIX}${key}`;
 
@@ -44,8 +56,15 @@ export type BoardFrame = { key: string; element: Element };
 
 export type FramePair = { key: string; current: Element; baseline: Element };
 
-/** Which column of the board a frame belongs to. */
-export type FrameColumn = 'current' | 'comparison';
+/**
+ * Which column of the board a frame belongs to.
+ *
+ * The spine's `Column`, re-exported rather than restated. Three modules named the
+ * same two-value union in three places, and a fourth value added to one of them
+ * would type-check against the other two — which is the drift this repo keeps
+ * finding the hard way.
+ */
+export type FrameColumn = Column;
 
 /**
  * A selector matching any frame on either column.
@@ -85,18 +104,18 @@ export type ResolvedPairs = {
 };
 
 /**
- * The current column's frames.
+ * The requested column's frames.
  *
  * Iterates the caller's keys rather than whatever the document contains, so a
  * frame that failed to mount is *reported* rather than quietly dropped — and so
  * the order is the board's order rather than the DOM's.
  */
-export function resolveFrames(host: unknown, keys: string[]): ResolvedFrames {
+export function resolveFrames(host: unknown, keys: string[], column: Column = 'current'): ResolvedFrames {
   const frames: BoardFrame[] = [];
   const missing: string[] = [];
 
   for (const key of keys) {
-    const element = query(host, `#${escape(frameId(key))}`);
+    const element = query(host, `#${escape(frameId(key, column === 'comparison'))}`);
     if (element) frames.push({ key, element });
     else missing.push(key);
   }

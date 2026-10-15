@@ -77,7 +77,16 @@ test('the press listener identifies frames by the platform id, never a data attr
   assert.doesNotMatch(blueprint, /data-screen/, 'a custom data attribute never reaches the DOM');
   // The selector itself moved to boardFrames, with the three other frame walks.
   assert.match(read('mobile/src/ide/boardFrames.ts'), /\[id\^="\$\{FRAME_PREFIX\}"\], \[id\^="\$\{BASELINE_PREFIX\}"\]/);
-  assert.match(blueprint, /nativeID=\{baseline \? `base-\$\{screenKey\}` : `screen-\$\{screenKey\}`\}/);
+  // And the board takes its ids from the same module. This used to assert the
+  // template literal the frame component built for itself, which *enshrined* the
+  // duplication: the ids and the walks that look for them were two copies of one
+  // rule, and a prefix renamed in one of them would leave the walks finding zero
+  // frames while every panel reported that the comparison simply had not run yet.
+  assert.match(blueprint, /nativeID=\{frameId\(screenKey, baseline\)\}/);
+  // No id built by hand. Scoped to `nativeID` rather than to the prefixes, because
+  // the baseline column's React `key` legitimately spells `base-<key>` and is not a
+  // DOM id — asserting on the bare prefix would fail on the wrong thing.
+  assert.doesNotMatch(blueprint, /nativeID=\{`/, 'the board must not build a frame id itself');
   assert.match(blueprint, /from '\.\/boardFrames'/);
 });
 
@@ -308,4 +317,43 @@ test('the app tree the guard protects is still untouched by this work', () => {
   // Every guarded file still exists, and the studio's own route is the only one
   // carved out.
   for (const file of guarded) assert.ok(readFileSync(join(ROOT, file), 'utf8').length > 0);
+});
+
+test('the render verdict reads the properties it compares, from one list', () => {
+  // The reader collects computed styles and the decision function compares them.
+  // Two lists of the same four names is a drift nobody reports: the reader would
+  // hand over a property the decider never looks at, or omit one it does. The
+  // reader spells its four out as an object literal because a built one would lose
+  // the `ObservedType['style']` type, so the agreement is asserted here instead.
+  const reader = code('mobile/src/ide/renderFidelity.dom.ts');
+  const decider = read('mobile/src/ide/renderFidelity.ts');
+
+  assert.doesNotMatch(reader, /const TYPE_STYLE/, 'the reader kept a second copy of the property list');
+
+  const listed = /export const TYPE_PROPERTIES = \[([^\]]+)\]/.exec(decider)?.[1] ?? '';
+  const properties = [...listed.matchAll(/'(\w+)'/g)].map((m) => m[1]);
+  assert.deepEqual(properties, ['fontSize', 'lineHeight', 'letterSpacing', 'fontWeight']);
+
+  const collected = /style: \{([^}]+)\}/.exec(reader)?.[1] ?? '';
+  for (const property of properties) {
+    assert.match(collected, new RegExp(`${property}:`), `the reader does not collect ${property}`);
+  }
+});
+
+test('the route panel renders its sections from the runtime provenance table', () => {
+  // The compiler is not in CI, so "a route cannot be constructed without a
+  // provenance" only holds if something at runtime enumerates the three. The panel
+  // used to hard-code three sections and keep a private `Record<string, string>` of
+  // labels beside them, which made the table decorative: a fourth provenance would
+  // have type-checked, been counted, and never appeared in the UI.
+  const panel = code('mobile/src/ide/RoutePanel.tsx');
+
+  assert.match(panel, /ROUTE_PROVENANCES/);
+  assert.match(panel, /ROUTE_PROVENANCES\.map\(/, 'the sections must come from the table');
+  assert.match(panel, /ROUTE_PROVENANCE\[/);
+  assert.doesNotMatch(panel, /Record<string, string>/, 'the panel kept a private copy of the labels');
+  // No hard-coded section headings: each one is `copy.label.toUpperCase()`.
+  for (const heading of ['OBSERVED', 'DECLARED', 'UNRESOLVED']) {
+    assert.doesNotMatch(panel, new RegExp(`>${heading}<`), `the ${heading} section is hard-coded rather than tabled`);
+  }
 });
