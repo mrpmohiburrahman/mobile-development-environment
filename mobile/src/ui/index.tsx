@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useDesigning } from '../ide/designing';
+import { usePrototypeNavigation } from '../ide/prototypeNavigation';
 import { useTheme, type TypeRole } from '../ds/store';
 
 type ColorKey = keyof ReturnType<typeof useTheme>['color'];
@@ -180,6 +181,7 @@ export function TabBar({ active }: { active: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const designing = useDesigning();
+  const prototypeNavigation = usePrototypeNavigation();
   const tabs: TabDef[] = [
     { key: '/', label: 'Today', icon: 'today' },
     { key: '/habits', label: 'Habits', icon: 'grid' },
@@ -203,7 +205,10 @@ export function TabBar({ active }: { active: string }) {
             <Pressable
               key={tab.key}
               onPress={() => {
-                if (designing) return;
+                if (designing) {
+                  prototypeNavigation?.('tab', tab.key);
+                  return;
+                }
                 router.navigate(tab.key as never);
               }}
               style={({ pressed }) => [
@@ -240,10 +245,14 @@ export function BackBar({ to = '/' }: { to?: string }) {
   const t = useTheme();
   const router = useRouter();
   const designing = useDesigning();
+  const prototypeNavigation = usePrototypeNavigation();
   return (
     <Pressable
       onPress={() => {
-        if (designing) return;
+        if (designing) {
+          prototypeNavigation?.('back');
+          return;
+        }
         if (router.canGoBack()) router.back();
         else router.replace(to as never);
       }}

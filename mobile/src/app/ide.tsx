@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { MidpointPrototype } from '../ide/MidpointPrototype';
 import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
 import { RoutePanel } from '../ide/RoutePanel';
@@ -28,6 +30,7 @@ const TABS: Tab[] = ['tokens', 'state', 'routes', 'baseline'];
  * ship, so the blueprint cannot drift from the real thing.
  */
 export default function IDE() {
+  const params = useLocalSearchParams<{ prototype?: string }>();
   const [tab, setTab] = useState<Tab>('tokens');
   // Whether the blueprint also draws the committed baseline. Kept here rather
   // than in the panel so the chrome owns layout state and the panel owns content.
@@ -52,6 +55,10 @@ export default function IDE() {
   // resubscribe rather than finding a stale flag and reporting "watching" over a
   // subscription that no longer exists.
   useEffect(() => attachSpine(), []);
+
+  if (__DEV__ && Platform.OS === 'web' && params.prototype === 'midpoints') {
+    return <MidpointPrototype />;
+  }
 
   if (Platform.OS !== 'web') {
     return (

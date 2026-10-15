@@ -71,6 +71,7 @@ around, not grounds to reject again).
 - [Mixpanel ingestion API, measured](issues/01-mixpanel-ingestion-api.md) — browser `/track` works cross-origin with no SDK and no proxy; `verbose=1` only proves "well-formed", so the tab says *accepted*, never *delivered*; token is not secret but host must match region; one UUID per browser as `$device_id`.
 - [Playwright on Expo web export, measured](issues/02-playwright-on-expo-web.md) — baselines must be Linux-only via the official Playwright Docker image; `reducedMotion: 'reduce'` is the wait, not a sleep; frame-level screenshots need the board scale pinned to 1; Playwright's own differ suffices.
 - [Bundling the display font](issues/03-bundling-the-font.md) — RNW ignores `global.css` for `Text`, so the app has never rendered Spline Sans; fix is `fontFamily` in the `Text` style plus hand-written `@font-face` and `public/fonts/`; Spline Sans has no 800 weight, so `display` drops to 700.
+- [How edges draw on the board](issues/05-edges-on-the-board.md) — Contour midpoint board with the Guide camera model: straight arrows between facing side midpoints for adjacent screens in the declared order, parallel detour lanes with rounded elbows above the row, dashed declared vs solid observed, board-local history for Back, draggable screen frames with hover-only grip and keyboard arrow support, header collision auto-nudge, and Overview on both the fly bar and the corner controls.
 
 ## Not yet specified
 
@@ -116,12 +117,13 @@ around, not grounds to reject again).
 | 02 | [Playwright on Expo web export, measured](issues/02-playwright-on-expo-web.md) | research | — (resolved) |
 | 03 | [Bundling the display font](issues/03-bundling-the-font.md) | research | — (resolved) |
 | 04 | [Create the Mixpanel project](issues/04-create-mixpanel-project.md) | task (HITL) | — |
-| 05 | [How edges draw on the board](issues/05-edges-on-the-board.md) | prototype | — |
+| 05 | [How edges draw on the board](issues/05-edges-on-the-board.md) | prototype | — (resolved) |
 | 06 | [Present mode and the shareable URL](issues/06-present-mode-and-url.md) | grilling | — |
 | 07 | [What the app tells Mixpanel](issues/07-mixpanel-event-design.md) | grilling | 01, 04 |
 | 08 | [The visual-regression contract](issues/08-visual-regression-contract.md) | grilling | 02, 03 |
 | 09 | [What the guard now guards](issues/09-the-new-guard.md) | grilling | 07, 08 |
 | 10 | [Collapse into the spec and tickets](issues/10-collapse-to-spec.md) | task | 05, 06, 07, 08, 09 |
+| 11 | [Board edges implementation](issues/11-board-edges-implementation.md) | task | 05 (resolved) |
 
-**Frontier: 04 (yours — create the Mixpanel project), 05, 06, and 08 (its
-blockers 02 and 03 are resolved).** 07 opens when you finish 04.
+**Frontier: 04 (yours — create the Mixpanel project), 06, 08 (its
+blockers 02 and 03 are resolved), and 11.** 07 opens when you finish 04.

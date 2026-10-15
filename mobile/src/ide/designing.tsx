@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import { recordRoute } from './spineStore';
+import { usePrototypeNavigation } from './prototypeNavigation';
 import type { Column } from './spine';
 
 /**
@@ -79,8 +80,10 @@ export function useNavigate() {
   const designing = useDesigning();
   const frame = useFrame();
   const router = useRouter();
+  const prototypeNavigation = usePrototypeNavigation();
   return (href: string) => {
     recordRoute({ from: frame.screenKey, to: href, column: frame.column });
+    if (designing) prototypeNavigation?.('push', href);
     if (designing) return;
     router.push(href as never);
   };

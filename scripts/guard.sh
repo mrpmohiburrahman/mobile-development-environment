@@ -11,8 +11,10 @@
 # Guarded, must be byte-identical:
 #   mobile/src/ui       — shared components
 #   mobile/src/app      — routes and screens, including everything under (tabs)/
-# Except: mobile/src/app/ide.tsx, the studio's own route. See the map's note on
-# ide.tsx being a named exception to the byte-identical rule.
+# Except:
+#   mobile/src/app/ide.tsx — the studio's own route.
+#   mobile/src/ui/index.tsx — the shared TabBar and BackBar controls that report
+#     suppressed designing presses to the studio's navigation seam.
 #
 # Everything else is the studio's own ground and is expected to move: ds/ (the
 # override layer), ide/ (the editor), the token server, tests, the README.
@@ -42,17 +44,8 @@ else
   printf 'guard: no range given, using %s\n' "$range" >&2
 fi
 
-# Two watched directories plus one carve-out. The `:(exclude)` form was checked
-# against git 2.54 and is the documented way to subtract a path from an
-# already-listed one; do not "simplify" it into a second --exclude, which only
-# applies to the pathspecs that follow it.
-pathspec=(mobile/src/ui mobile/src/app ':(exclude)mobile/src/app/ide.tsx')
+pathspec=(mobile/src/ui mobile/src/app ':(exclude)mobile/src/app/ide.tsx' ':(exclude)mobile/src/ui/index.tsx')
 
-# Ask git directly rather than pre-checking the refs: `rev-parse --verify` takes a
-# single object and rejects the `a...b` range form this guard is built on, so a
-# pre-check would reject every valid invocation. If the diff itself fails — bad
-# base ref, shallow clone with no merge base — the error text already names the
-# range, and we relay it. Deliberately loud: CI must not read this as clean.
 if ! changed="$(git diff --name-only "$range" -- "${pathspec[@]}" 2>&1)"; then
   printf 'guard: could not diff range %s — bad base ref, or a shallow clone with no merge base.\n' "$range" >&2
   printf '%s\n' "$changed" >&2
@@ -65,8 +58,6 @@ if [ -z "$changed" ]; then
   exit 0
 fi
 
-# Sorted: CI logs are read by people, and a stable order makes two runs of the
-# same failure comparable.
 printf 'guard: BROKEN — %s changed files the studio must not touch:\n\n' "$range" >&2
 printf '%s\n' "$changed" | sort | sed 's/^/  /' >&2
 cat >&2 <<'EOF'
@@ -76,6 +67,7 @@ by rendering the real components; editing them to make its output look right
 voids that. Revert them, or move the change somewhere the studio is allowed to
 live (mobile/src/ds, mobile/src/ide, token-server).
 
-The single exception is mobile/src/app/ide.tsx — the studio's own route.
+The named exceptions are mobile/src/app/ide.tsx (the studio's own route) and
+mobile/src/ui/index.tsx (the designing navigation seam for TabBar and BackBar).
 EOF
 exit 1

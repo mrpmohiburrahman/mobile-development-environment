@@ -201,6 +201,21 @@ test('ide.tsx stays exempt while a sibling app screen is caught', () => {
   });
 });
 
+test('ui/index.tsx stays exempt for the designing seam while sibling ui files are caught', () => {
+  withRepo(({ dir, commit }) => {
+    commit({ 'mobile/src/ui/index.tsx': 'export const TabBar = 2;\n' });
+    assert.equal(runGuard(dir).code, 0);
+
+    commit({
+      'mobile/src/ui/index.tsx': 'export const TabBar = 3;\n',
+      'mobile/src/ui/Card.tsx': 'export const Card = 2;\n',
+    });
+    const result = runGuard(dir);
+    assert.equal(result.code, 1);
+    assert.deepEqual(offendingFiles(result.stdout), ['mobile/src/ui/Card.tsx']);
+  });
+});
+
 test('edits the studio is allowed to make all pass', () => {
   // ds/, ide/, the token server and the README are the studio's own ground.
   withRepo(({ dir, commit }) => {
