@@ -51,7 +51,13 @@ The whole thing is six ideas.
 
 Screens are enumerated from the router directory with `require.context`, so adding a route file puts it on the artboard automatically. A hand-written import list goes stale the first time someone forgets — which is exactly the drift the blueprint exists to catch.
 
-## Try the read-only build
+## The deployed build
+
+Try it: **https://mrpmohiburrahman.github.io/mobile-development-environment/ide**
+
+The live demo edits tokens **in memory**. Recolouring feels identical, but nothing is written, because a static web build has no filesystem.
+
+To build the same thing locally:
 
 ```bash
 npm run export:web
@@ -60,11 +66,9 @@ npm run preview
 
 Then open **http://localhost:8080/ide**.
 
-`export:web` writes `dist/` and bakes a token-server URL that nothing listens on, so the build cannot write even if a writer is up on this machine. `preview` serves that folder. It binds to `127.0.0.1` and reads `HOST` and `PORT`. The badge says **in-memory only**, and the baseline tab says there is no committed baseline. Drag a colour. The screens repaint. `git diff` stays empty.
+`export:web` writes `dist/`. It bakes the token-server URL `http://127.0.0.1:9`. Browsers block port 9, so every write fails at once and reaches no machine. That is true even when a writer runs on this machine. `preview` serves `dist/` and refuses every method except `GET` and `HEAD`. It binds to `127.0.0.1` and reads `HOST` and `PORT`. The badge says **in-memory only**. The compare toggle says **no committed baseline**, and the baseline tab says there is no token server. Drag a colour. The screens repaint. `git diff` stays empty.
 
-## The deployed build
-
-The live demo edits tokens **in memory**. Recolouring feels identical, but nothing is written, because a static web build has no filesystem.
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs the same export on every push to `main` and publishes it to GitHub Pages.
 
 That's not a workaround bolted on — it falls out of the design. Edits are an override layer merged over the JSON file, so with a server running the file converges on the override and the override is a no-op; with no server the override is all there is. One code path, both modes.
 
@@ -150,7 +154,10 @@ mobile/
   src/ui/           token-driven components
 token-server/       the writer
 test/               node:test, no framework, no build step, no dependency
-scripts/guard.sh    the byte-identical guard
+scripts/
+  guard.sh          the byte-identical guard
+  export-web.sh     the read-only web export, into dist/
+  serve-static.mjs  the local preview of dist/, read-only
 ```
 
 ## Known limits
