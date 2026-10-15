@@ -127,6 +127,11 @@ test('Pages verifies the code and export before upload', () => {
   assert.match(exporter, /node scripts\/verify-web\.mjs dist/);
 });
 
+test('clean typechecking loads Expo declarations without generated files', () => {
+  const config = JSON.parse(readFileSync(join(ROOT, 'mobile/tsconfig.json'), 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+  assert.ok(config.compilerOptions.types?.includes('expo/types'));
+});
+
 test('the guard script is executable and starts with a shebang', () => {
   // `npm run guard` and any direct ./scripts/guard.sh both depend on this.
   const script = readFileSync(join(ROOT, 'scripts/guard.sh'), 'utf8');
