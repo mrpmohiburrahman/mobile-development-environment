@@ -6,6 +6,8 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "guard": "bash scripts/guard.sh",
     "tokens": "node token-server/index.mjs",
+    "export:web": "bash scripts/export-web.sh",
+    "preview": "node scripts/serve-static.mjs",
     "web": "cd mobile && npx expo start --web",
     "ios": "cd mobile && npx expo start --ios"
   },

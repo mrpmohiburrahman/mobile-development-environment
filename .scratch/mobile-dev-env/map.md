@@ -28,6 +28,7 @@ Done when someone can clone it, run two commands, drag a colour picker, and see 
 - [Token editor panel](issues/08-token-editor-panel.md) — native `<input type="color">` and `type="range"`; no picker dependency.
 - [State inspector](issues/09-state-inspector.md) — recursive tree over the Zustand store, no devtools integration needed.
 - [Demo app screens](issues/10-demo-app-screens.md) — seven screens on seeded local data, all rendering through token-reading components.
+- [README and deploy](issues/11-readme-and-deploy.md) — GIFs of a real colour edit and its one-line diff; `npm run export:web` then `npm run preview` serves the read-only build, with a token-server URL that nothing listens on.
 
 **Verified working end to end** (commit `a247613`): server write → Fast Refresh → every screen repaints at once; an edit produces exactly one line of diff; `POST /revert` returns the file to clean; unknown token paths are rejected.
 

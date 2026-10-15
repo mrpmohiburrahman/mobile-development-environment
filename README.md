@@ -6,6 +6,10 @@ Drag a colour picker, and every screen repaints at once — in the browser and o
 
 ![the studio](docs/media/studio.png)
 
+![a colour edit repaints every screen, and the badge says the write landed on disk](docs/media/edit-loop.gif)
+
+![that edit is one line in git](docs/media/git-diff.gif)
+
 ## Why
 
 Two frictions this removes:
@@ -46,6 +50,17 @@ The whole thing is six ideas.
 **5. Screens know when they're being designed.** Inside the blueprint a tap must not navigate, or the whole artboard would sail off to one route. Screens call `useNavigate()` from [`designing.tsx`](mobile/src/ide/designing.tsx), which no-ops under a `DesigningProvider`. Context rather than a `designing` prop, because Expo Router owns screen mounting — there's no single call site to thread a prop from.
 
 Screens are enumerated from the router directory with `require.context`, so adding a route file puts it on the artboard automatically. A hand-written import list goes stale the first time someone forgets — which is exactly the drift the blueprint exists to catch.
+
+## Try the read-only build
+
+```bash
+npm run export:web
+npm run preview
+```
+
+Then open **http://localhost:8080/ide**.
+
+`export:web` writes `dist/` and bakes a token-server URL that nothing listens on, so the build cannot write even if a writer is up on this machine. `preview` serves that folder. It binds to `127.0.0.1` and reads `HOST` and `PORT`. The badge says **in-memory only**, and the baseline tab says there is no committed baseline. Drag a colour. The screens repaint. `git diff` stays empty.
 
 ## The deployed build
 
