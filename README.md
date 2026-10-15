@@ -66,9 +66,20 @@ npm run preview
 
 Then open **http://localhost:8080/ide**.
 
-`export:web` writes `dist/`. It bakes the token-server URL `http://127.0.0.1:9`. Browsers block port 9, so every write fails at once and reaches no machine. That is true even when a writer runs on this machine. `preview` serves `dist/` and refuses every method except `GET` and `HEAD`. It binds to `127.0.0.1` and reads `HOST` and `PORT`. The badge says **in-memory only**. The compare toggle says **no committed baseline**, and the baseline tab says there is no token server. Drag a colour. The screens repaint. `git diff` stays empty.
+`export:web` writes `dist/`. It bakes the token-server URL `http://127.0.0.1:9`. The client treats that value as read-only and makes no token-server requests. Browsers also block port 9. A local writer cannot receive edits from this build. The export checks every HTML page for incomplete server rendering and verifies its script and stylesheet files.
 
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs the same export on every push to `main` and publishes it to GitHub Pages.
+`preview` serves `dist/` and refuses every method except `GET` and `HEAD`. It binds to `127.0.0.1` and reads `HOST` and `PORT`. The badge says **in-memory only**. The compare toggle says **no committed baseline**, and the baseline tab says there is no token server. Drag a colour. The screens repaint. `git diff` stays empty.
+
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs tests, lint, typechecking, the app-tree guard, and the export before it uploads the Pages artifact. It deploys on every push to `main`.
+
+To check the Pages subpath locally:
+
+```bash
+EXPO_BASE_URL=/mobile-development-environment npm run export:web
+EXPO_BASE_URL=/mobile-development-environment npm run preview
+```
+
+Open **http://localhost:8080/mobile-development-environment/ide**.
 
 That's not a workaround bolted on — it falls out of the design. Edits are an override layer merged over the JSON file, so with a server running the file converges on the override and the override is a no-op; with no server the override is all there is. One code path, both modes.
 
@@ -104,13 +115,11 @@ The studio assumes the render on screen is the render that was designed. The hea
 
 It probes which family actually won the display font stack by rendering a test string in each candidate and in two known-different references, and comparing widths. Every candidate is named with its fate — present, fell through, or unmeasured — and an unanswerable one is never reported as fine. It then checks the `type.*` tokens against the computed styles of the text on the real screens, and reports how many screens and how many properties it compared.
 
-**Measured answer: no, not today.** The display stack names two families ahead of the system fallbacks: `Spline Sans`, then `Inter`. The measurement found one of them. `Spline Sans` is absent. `Inter` is present, and this repository does not ship it.
+**The measured answer depends on the browser.** The font stack names `Spline Sans` and `Inter` before its system fallbacks. One local measurement found `Inter` but no `Spline Sans`. The GIF records a different font result. Neither result applies to every browser.
 
-The app declares no font face. Nothing imports the font package. The type tokens carry no font family. So the `Inter` that wins came from the machine, not from the commit. No font directory lists it either. It sits in a file inside an unrelated application bundle. Three independent measurements had to agree before the studio believed that answer.
+The app declares no font face. Nothing imports a font package. The type tokens carry no font family. The browser uses the fonts available on that machine, not a font supplied by this repository.
 
-That is a stronger finding than the one predicted, not a weaker one. The plan said both families would be absent and was half right. Either way, the stack resolves to one face here, to a different face on a machine without `Inter`, and to a third on Linux. Three machines, three rasters, one committed tree. The header prints the face it found, so the answer changes on the day a web font ships.
-
-That is the claim the board's header is making when it prints this line.
+The header reports its current measurement, including absent and unmeasured families. The GIFs and still record their capture sessions. They do not define a font baseline for the hosted build.
 
 ## The five ideas from the talk
 
