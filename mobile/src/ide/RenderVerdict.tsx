@@ -11,6 +11,7 @@ import {
   type TypeReport,
 } from './renderFidelity';
 import { observeTypeStyles, probeFontCandidates } from './renderFidelity.dom';
+import { resolveFrames } from './boardFrames';
 import { screens } from './screens';
 import { CHROME, TONE } from './chrome';
 import { Label } from './Label';
@@ -33,6 +34,9 @@ export type RenderVerdict = {
   observed: ObservedType[] | null;
   typeTokens: Record<string, { size: number; weight: string; lineHeight: number; letterSpacing: number }>;
   measured: boolean;
+  /** How many frames were read, and how many the board has that were not. */
+  framesRead: number;
+  framesMissing: number;
 };
 
 /**
@@ -56,9 +60,7 @@ export function useRenderVerdict(host: RefObject<View | null>): RenderVerdict | 
     if (!node?.querySelector) return;
 
     const id = requestAnimationFrame(() => {
-      const frames = screens
-        .map(({ key }) => ({ key, element: node.querySelector(`#screen-${CSS.escape(key)}`) }))
-        .filter((f): f is { key: string; element: Element } => f.element !== null);
+      const resolved = resolveFrames(node, screens.map((s) => s.key));
 
       const stack = readDisplayStack();
       // Every candidate, multi-word ones included. An earlier version filtered out
@@ -67,9 +69,13 @@ export function useRenderVerdict(host: RefObject<View | null>): RenderVerdict | 
       // actually missing. Quoting is handled in the reader; the filter was the bug.
       setVerdict({
         candidates: judgeCandidates(stack, probeFontCandidates(stack)),
-        observed: observeTypeStyles(frames),
+        // `null` when no frame could be read at all, which the report renders as
+        // *not measured*. Zero frames is not "the tokens reached every screen".
+        observed: observeTypeStyles(resolved.frames),
         typeTokens: JSON.parse(typeJson) as RenderVerdict['typeTokens'],
-        measured: frames.length > 0,
+        measured: resolved.found > 0,
+        framesRead: resolved.found,
+        framesMissing: resolved.missing.length,
       });
     });
 
@@ -190,7 +196,9 @@ export function RenderVerdictBadge({ host }: { host: RefObject<View | null> }) {
       </Label>
       <Label role="caption" color={CHROME.textMuted} numberOfLines={1}>
         measured in this browser, not read from a file: {font.measured} of {font.total} stack
-        families probed.
+        families probed, on {verdict.framesRead} screen
+        {verdict.framesRead === 1 ? '' : 's'}
+        {verdict.framesMissing > 0 ? ` (${verdict.framesMissing} did not mount)` : ''}.
       </Label>
     </View>
   );

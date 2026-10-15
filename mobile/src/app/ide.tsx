@@ -25,7 +25,7 @@ export default function IDE() {
   // The ref lands on the node holding both columns, so the drift walk can pair
   // them and the route panel can count the back controls it finds there. Owned
   // here because that node wraps the blueprint, not the panel.
-  const { rootRef, screens } = useScreenDrift(comparing);
+  const { rootRef, screens, unpaired } = useScreenDrift(comparing);
 
   // The change log attaches here rather than at module scope, so "nothing has
   // happened yet" and "nothing is listening" stay two different sentences. Both
@@ -82,7 +82,7 @@ export default function IDE() {
                 <Label role="label" color={CHROME.text} style={{ letterSpacing: 1 }}>
                   SCREENS
                 </Label>
-                <Drifted screens={screens} />
+                <Drifted screens={screens} unpaired={unpaired} />
               </View>
             </View>
           )}

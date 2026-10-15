@@ -87,6 +87,14 @@ export type RouteGap = {
   count: number | null;
   provenance: RouteProvenance;
   reason: string;
+  /**
+   * Frames that did not mount when the count was taken.
+   *
+   * Carried rather than discarded, because a count read over five of seven frames
+   * is not a count of the board. The gap reports what it measured; this says how
+   * much board it measured it on.
+   */
+  missingFrom: string[];
 };
 
 /** The counts, which lead the list. */
@@ -164,12 +172,13 @@ export function routeCounts(rows: RouteRow[], gaps: RouteGap[] = []): RouteCount
  * the glyph the back bar draws. `null` when the studio could not look — which is
  * a different claim from zero and is worded differently.
  */
-export function backGap(count: number | null): RouteGap {
+export function backGap(count: number | null, missingFrom: string[] = []): RouteGap {
   return {
     control: 'back',
     count,
     provenance: 'unresolved',
     reason: 'resolves against history at press time, so the studio cannot draw it as an edge',
+    missingFrom,
   };
 }
 

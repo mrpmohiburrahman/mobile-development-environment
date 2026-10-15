@@ -11,6 +11,7 @@ import {
 } from './detectDrift';
 import { Label } from './Label';
 import { useCommittedTokens } from './BaselinePanel';
+import { resolveFramePairs } from './boardFrames';
 
 /** One screen's verdict, with whatever could be attributed. */
 export type ScreenDrift = {
@@ -40,7 +41,12 @@ export function useScreenDrift(enabled: boolean) {
   // Attach to the DOM node holding *both* columns. Owned by the caller because
   // that node is the blueprint's container, not this panel's.
   const rootRef = useRef<View>(null);
-  const [result, setResult] = useState<{ screens: ScreenDrift[]; drift: Difference[] } | null>(null);
+  const [result, setResult] = useState<{
+    screens: ScreenDrift[];
+    drift: Difference[];
+    /** Keys with only one of the two columns mounted, so no pair exists. */
+    unpaired: string[];
+  } | null>(null);
 
   // The tree diff is the vocabulary the attribution matches values against.
   const drift = useMemo(
@@ -52,23 +58,17 @@ export function useScreenDrift(enabled: boolean) {
     if (!enabled || !baseline) return;
 
     const read = () => {
-      const host = rootRef.current as unknown as HTMLElement | null;
-      if (!host?.querySelector) return;
-
       // The board's own screen keys, not the DOM's: iterating `screens.ts` means
-      // a frame that failed to mount is reported as missing rather than quietly
-      // dropping out of the comparison.
-      const screenKeys = screens.map((s) => s.key);
-      const pairs: { current: Element; baseline: Element; key: string; label: string }[] = [];
-      for (const key of screenKeys) {
-        const a = host.querySelector(`#screen-${CSS.escape(key)}`);
-        const b = host.querySelector(`#base-${CSS.escape(key)}`);
-        if (!a || !b) continue;
-        const label = screens.find((s) => s.key === key)?.label ?? key;
-        pairs.push({ current: a, baseline: b, key, label });
-      }
+      // a frame that failed to mount is *reported* rather than quietly dropping
+      // out of the comparison. `resolveFramePairs` needs both columns, and says
+      // which keys it could not pair rather than returning half a pair.
+      const resolved = resolveFramePairs(
+        rootRef.current as unknown as HTMLElement | null,
+        screens.map((s) => s.key),
+      );
 
-      const verdicts: ScreenDrift[] = pairs.map(({ current: a, baseline: b, key, label }) => {
+      const verdicts: ScreenDrift[] = resolved.pairs.map(({ current: a, baseline: b, key }) => {
+        const label = screens.find((s) => s.key === key)?.label ?? key;
         const found = detectDriftInSubtrees(a, b, drift);
         const differences: StyleDifference[] = found.differences;
         return {
@@ -81,7 +81,7 @@ export function useScreenDrift(enabled: boolean) {
         };
       });
 
-      setResult({ screens: verdicts, drift });
+      setResult({ screens: verdicts, drift, unpaired: resolved.unpaired });
     };
 
     // Run after paint, once the second column has mounted.
@@ -89,7 +89,7 @@ export function useScreenDrift(enabled: boolean) {
     return () => cancelAnimationFrame(id);
   }, [enabled, baseline, drift, current]);
 
-  return { rootRef, ...(result ?? { screens: [], drift }) };
+  return { rootRef, ...(result ?? { screens: [], drift, unpaired: [] }) };
 }
 
 /**
@@ -100,15 +100,28 @@ export function useScreenDrift(enabled: boolean) {
  * about the same comparison, and splitting them across two tabs would make the
  * reader correlate them by hand.
  */
-export function Drifted({ screens }: { screens: ScreenDrift[] }) {
+export function Drifted({ screens, unpaired = [] }: { screens: ScreenDrift[]; unpaired?: string[] }) {
   const drifted = screens.filter((s) => s.drifted);
   const mismatched = screens.filter((s) => s.structureMismatch);
 
+  // A key that could not be paired is reported before anything else, because
+  // "no screen drifted" over fewer screens than the board has is the most
+  // confident wrong answer this panel could print.
+  const pairing = unpaired.length > 0 ? (
+    <Label role="caption" color={TONE.degraded}>
+      {unpaired.length} frame pair{unpaired.length === 1 ? '' : 's'} had only one column mounted, so
+      nothing was compared for {unpaired.join(', ')}
+    </Label>
+  ) : null;
+
   if (screens.length === 0) {
     return (
-      <Label role="caption" color={CHROME.textMuted}>
-        turn on the comparison to see which screens drifted
-      </Label>
+      <View style={{ gap: 4 }}>
+        <Label role="caption" color={CHROME.textMuted}>
+          turn on the comparison to see which screens drifted
+        </Label>
+        {pairing}
+      </View>
     );
   }
 
@@ -126,6 +139,7 @@ export function Drifted({ screens }: { screens: ScreenDrift[] }) {
           {screens.length} screens compared node for node — same components, same
           store state, same tokens.
         </Label>
+        {pairing}
         {mismatched.length > 0 ? (
           <Label role="caption" color={TONE.degraded}>
             {mismatched.length} frame pair{mismatched.length === 1 ? '' : 's'} had a different

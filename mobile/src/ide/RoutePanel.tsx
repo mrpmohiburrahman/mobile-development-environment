@@ -13,6 +13,7 @@ import { formatPath } from './spine';
 import { useSpine } from './spineStore';
 import { routerKeys, screens } from './screens';
 import { countBackControls } from './renderFidelity.dom';
+import { resolveFrames } from './boardFrames';
 import { CHROME, TONE } from './chrome';
 import { Label } from './Label';
 
@@ -78,7 +79,12 @@ export function RoutePanel({ host }: { host: RefObject<View | null> }) {
   // back bar once a habit is selected, which is itself a state change the log
   // knows about. So it is re-read whenever the log moves.
   useEffect(() => {
-    const id = requestAnimationFrame(() => setGap(backGap(countBackControls(framesFrom(host.current)))));
+    const id = requestAnimationFrame(() => {
+      const resolved = resolveFrames(host.current, screens.map((s) => s.key));
+      // `null` when the board itself is not there. Zero would be a claim about the
+      // app, and the difference matters: the count is a reading, not a finding.
+      setGap(backGap(resolved.found === 0 ? null : countBackControls(resolved.frames), resolved.missing));
+    });
     return () => cancelAnimationFrame(id);
   }, [host, spine.seq]);
 
@@ -162,25 +168,12 @@ export function RoutePanel({ host }: { host: RefObject<View | null> }) {
           </Label>
         </View>
       ) : null}
+    {gap.missingFrom?.length ? (
+        <Label role="caption" color={TONE.degraded}>
+          {gap.missingFrom.length} frame{gap.missingFrom.length === 1 ? '' : 's'} did not mount, so this
+          count is not the whole board
+        </Label>
+      ) : null}
     </View>
   );
-}
-
-/**
- * The board's frames, by their real DOM ids.
- *
- * `nativeID`, never a `data-*` prop: React Native Web filters unknown props off
- * `View`, so `data-screen-key` silently never reaches the document — and a walk
- * that finds zero frames while the panel reports something else is the failure this
- * repo has already shipped once.
- */
-function framesFrom(host: View | null): { key: string; element: Element }[] {
-  const node = host as unknown as HTMLElement | null;
-  if (!node?.querySelector) return [];
-  const frames: { key: string; element: Element }[] = [];
-  for (const { key } of screens) {
-    const element = node.querySelector(`#screen-${CSS.escape(key)}`);
-    if (element) frames.push({ key, element });
-  }
-  return frames;
 }

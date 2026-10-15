@@ -75,8 +75,10 @@ test('the press listener identifies frames by the platform id, never a data attr
   // completely wrong.
   const blueprint = code('mobile/src/ide/Blueprint.tsx');
   assert.doesNotMatch(blueprint, /data-screen/, 'a custom data attribute never reaches the DOM');
-  assert.match(blueprint, /\[id\^="screen-"\], \[id\^="base-"\]/);
+  // The selector itself moved to boardFrames, with the three other frame walks.
+  assert.match(read('mobile/src/ide/boardFrames.ts'), /\[id\^="\$\{FRAME_PREFIX\}"\], \[id\^="\$\{BASELINE_PREFIX\}"\]/);
   assert.match(blueprint, /nativeID=\{baseline \? `base-\$\{screenKey\}` : `screen-\$\{screenKey\}`\}/);
+  assert.match(blueprint, /from '\.\/boardFrames'/);
 });
 
 test('the navigation seam records and still never navigates inside the blueprint', () => {
@@ -240,6 +242,59 @@ test('the drift report denial of a pixel diff survives', () => {
   const drift = read('mobile/src/ds/drift.ts');
   assert.match(drift, /not a pixel diff of two screenshots/);
   assert.match(drift, /whichever font[\s\S]{0,40}happened to load/);
+});
+
+test('there is exactly one way to find the board frames in the studio', () => {
+  // Three features need the frames: the drift walk pairs the two columns, the
+  // route panel counts the back controls, the render verdict reads computed type
+  // styles. Each grew its own `querySelector('#screen-' + key)` loop, and two of
+  // them were written the same night. That is how a mechanism which has already
+  // failed once — `data-*` never reaches the DOM, so a walk finds nothing while
+  // the panel reports an ordinary result — acquired more copies of itself.
+  //
+  // The mechanism now lives in boardFrames.ts and returns what it did not find, so
+  // a partial board cannot be reported as a complete one. This asserts there is
+  // only one implementation left to drift.
+  const walkers = [
+    'mobile/src/ide/ScreenDriftPanel.tsx',
+    'mobile/src/ide/RoutePanel.tsx',
+    'mobile/src/ide/RenderVerdict.tsx',
+    'mobile/src/ide/Blueprint.tsx',
+  ];
+
+  for (const file of walkers) {
+    assert.doesNotMatch(
+      code(file),
+      /#screen-\$\{|CSS\.escape\(key\)|id\^="screen-"/,
+      `${file} walks the board's frames itself; it should import boardFrames`,
+    );
+  }
+
+  for (const file of walkers) {
+    assert.match(
+      code(file),
+      /from '\.\/boardFrames'/,
+      `${file} should read the frame rule from boardFrames`,
+    );
+  }
+
+  // And the one implementation of the rule itself has no DOM-crawling siblings.
+  const board = read('mobile/src/ide/boardFrames.ts');
+  assert.match(board, /FRAME_PREFIX = 'screen-'/);
+  assert.match(board, /BASELINE_PREFIX = 'base-'/);
+});
+
+test('every frame walk reports what it did not find', () => {
+  // The zero-count rule applied to the mechanism itself. A caller that cannot see
+  // how much board it read cannot report a count as a fact.
+  const board = read('mobile/src/ide/boardFrames.ts');
+  assert.match(board, /missing: string\[\]/);
+  assert.match(board, /unpaired: string\[\]/);
+  assert.match(board, /found: number/);
+
+  for (const file of ['mobile/src/ide/RoutePanel.tsx', 'mobile/src/ide/RenderVerdict.tsx', 'mobile/src/ide/ScreenDriftPanel.tsx']) {
+    assert.match(code(file), /resolveFrame(s|Pairs)?\(/, `${file} should read frames through the shared rule`);
+  }
 });
 
 test('the app tree the guard protects is still untouched by this work', () => {

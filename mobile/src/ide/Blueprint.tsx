@@ -11,6 +11,7 @@ import { clipTarget, describePresses } from './presses';
 import { tallyPresses } from './spine';
 import { recordPress, useSpine } from './spineStore';
 import { RenderVerdictBadge } from './RenderVerdict';
+import { frameSelector, parseFrameId } from './boardFrames';
 
 /**
  * How a press listener finds the frame it landed in.
@@ -20,8 +21,11 @@ import { RenderVerdictBadge } from './RenderVerdict';
  * `data-screen-key` silently never reaches the document; a pairing walk that finds
  * zero frames while the panel says the comparison "has not run yet" is the exact
  * failure this repo has already shipped once.
+ *
+ * The selector and the id prefixes live in `boardFrames.ts`, with the three other
+ * walks that need them, so there is one rule rather than four copies of it.
  */
-const FRAME_SELECTOR = '[id^="screen-"], [id^="base-"]';
+const FRAME_SELECTOR = frameSelector();
 
 const PHONE = { width: 390, height: 820 };
 
@@ -173,13 +177,13 @@ export function Blueprint({ comparing = false }: { comparing?: boolean }) {
       if (!frame || !node.contains(frame)) return;
 
       const id = frame.id;
-      const comparison = id.startsWith('base-');
-      const key = comparison ? id.slice('base-'.length) : id.slice('screen-'.length);
+      const parsed = parseFrameId(id);
+      if (!parsed) return;
 
       recordPress({
-        frame: key,
-        column: comparison ? 'comparison' : 'current',
-        label: labels.current.get(key) ?? key,
+        frame: parsed.key,
+        column: parsed.column,
+        label: labels.current.get(parsed.key) ?? parsed.key,
         target: clipTarget(target.textContent),
       });
     };
