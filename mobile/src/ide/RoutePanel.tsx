@@ -1,12 +1,16 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import {
+  ROUTE_PROVENANCE,
+  ROUTE_PROVENANCES,
   buildRouteList,
   routeCounts,
   backGap,
   describeBackGap,
-  screensWithoutExits,
+  exitReport,
+  routesOutOf,
   type RouteGap,
+  type RouteProvenance,
   type RouteRow,
 } from './routes';
 import { formatPath } from './spine';
@@ -14,15 +18,20 @@ import { useSpine } from './spineStore';
 import { routerKeys, screens } from './screens';
 import { countBackControls } from './renderFidelity.dom';
 import { resolveFrames } from './boardFrames';
-import { CHROME, TONE } from './chrome';
+import { CHROME, TONE, chipStyle } from './chrome';
 import { Label } from './Label';
 
-/** How a provenance is named in a row. Short enough for a 300px panel. */
-const PROVENANCE: Record<string, string> = {
-  observed: 'observed',
-  declared: 'declared',
-  unresolved: 'unresolved',
-};
+function Chip({ label, active, pick }: { label: string; active: boolean; pick: () => void }) {
+  return (
+    <Pressable
+      onPress={pick}
+      style={({ pressed }) => chipStyle({ active, pressed, size: 'compact' }).container}>
+      <Label role="caption" color={chipStyle({ active, pressed: false, size: 'compact' }).textColor}>
+        {label}
+      </Label>
+    </Pressable>
+  );
+}
 
 function Row({ row }: { row: RouteRow }) {
   return (
@@ -31,8 +40,8 @@ function Row({ row }: { row: RouteRow }) {
         <Label role="caption" color={CHROME.textMuted} style={{ fontFamily: 'monospace' }} numberOfLines={1}>
           {row.from ?? 'unknown'} → {row.to}
         </Label>
-        <Label role="caption" color={row.provenance === 'observed' ? TONE.ok : TONE.muted} style={{ fontWeight: '600' }}>
-          {PROVENANCE[row.provenance]}
+        <Label role="caption" color={TONE[ROUTE_PROVENANCE[row.provenance].tone]} style={{ fontWeight: '600' }}>
+          {ROUTE_PROVENANCE[row.provenance].label}
         </Label>
       </View>
 
@@ -56,12 +65,64 @@ function Row({ row }: { row: RouteRow }) {
 }
 
 /**
+ * The frame picker: pick a screen and the list narrows to its connections.
+ *
+ * A list of every route answers "how does this app connect", and a board of seven
+ * frames answers "which screens exist" — but the question a reader actually arrives
+ * with is usually smaller than either: *what can I reach from here*. Highlighting
+ * the frame on the board and narrowing the list to it answers that one, and the
+ * board-side highlight is what stops the two halves reading as unrelated widgets.
+ */
+function FramePicker({ focus, onChange }: { focus: string | null; onChange: (key: string | null) => void }) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Label role="caption" color={CHROME.textMuted}>
+        ONE FRAME&rsquo;S CONNECTIONS
+      </Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+        <Chip label="all" active={focus === null} pick={() => onChange(null)} />
+        {screens.map((screen) => (
+          <Chip
+            key={screen.key}
+            label={screen.label}
+            active={focus === screen.key}
+            pick={() => onChange(focus === screen.key ? null : screen.key)}
+          />
+        ))}
+      </View>
+      <Label role="caption" color={CHROME.textMuted}>
+        {focus === null
+          ? 'pick a frame to narrow the list and highlight it on the board'
+          : 'the matching frame is outlined on the board; pick it again, or all, to widen back out'}
+      </Label>
+    </View>
+  );
+}
+
+/**
  * The route list: what the app can navigate to, and how each fact was learned.
  *
  * ## Why the counts come first
  *
  * A reader who sees "11 routes" believes the studio watched eleven. It watches
  * seven. So the breakdown leads, and a row cannot be drawn without its provenance.
+ *
+ * ## Why the observed count is the seam's, not the list's
+ *
+ * A count taken from the list's own length cannot disagree with the list, so
+ * printing it would prove nothing. The headline number is the seam's tally —
+ * incremented as a route passes through, never read back off the rows — and the
+ * list's own length is printed beside it as the cross-check. When the two differ,
+ * the panel says so in words, because that difference is the only evidence anyone
+ * would ever get that the list drew a route it never saw.
+ *
+ * ## Where the sections come from
+ *
+ * `ROUTE_PROVENANCES`, the runtime table in `routes.ts`. The panel maps over it
+ * rather than hard-coding three sections, so a provenance added there appears here
+ * with its own heading, colour and wording — and one added to the union *without*
+ * a table row is caught by the test that walks the union, instead of being silently
+ * dropped from the UI.
  *
  * ## Where the back control sits
  *
@@ -70,7 +131,16 @@ function Row({ row }: { row: RouteRow }) {
  * would read as "there are none", so zero is worded differently from a count the
  * studio could not take at all.
  */
-export function RoutePanel({ host }: { host: RefObject<View | null> }) {
+export function RoutePanel({
+  host,
+  focus = null,
+  onFocusChange,
+}: {
+  host: RefObject<View | null>;
+  /** The frame whose connections to show, or null for the whole board. */
+  focus?: string | null;
+  onFocusChange?: (key: string | null) => void;
+}) {
   const spine = useSpine();
   const [gap, setGap] = useState<RouteGap>(() => backGap(null));
 
@@ -89,11 +159,21 @@ export function RoutePanel({ host }: { host: RefObject<View | null> }) {
   }, [host, spine.seq]);
 
   const rows = buildRouteList(spine.entries, routerKeys);
-  const counts = routeCounts(rows, [gap]);
+  // The seam's own tally is the headline; the list's length is the cross-check.
+  const counts = routeCounts(rows, [gap], spine.routeEvents);
   const gapCopy = describeBackGap(gap);
-  const exits = screensWithoutExits(rows, routerKeys);
-  const observed = rows.filter((r) => r.provenance === 'observed');
-  const declared = rows.filter((r) => r.provenance === 'declared');
+  const exits = exitReport(rows, routerKeys, spine.routeEvents);
+
+  // Narrowed to one frame when the reader picked one. `routesOutOf` decides what a
+  // frame's connections are — including that a tab screen's exits are declared
+  // rather than watched — so the panel is not the place that rule lives.
+  const scoped = focus === null ? null : routesOutOf(rows, focus, routerKeys, [gap]);
+  const rowsFor = (provenance: RouteProvenance): RouteRow[] => {
+    // A gap is a control, not a route, so it never has rows in any scope.
+    if (provenance === 'unresolved') return [];
+    if (scoped) return scoped[provenance];
+    return rows.filter((r) => r.provenance === provenance);
+  };
 
   return (
     <View style={{ gap: 14 }}>
@@ -111,69 +191,96 @@ export function RoutePanel({ host }: { host: RefObject<View | null> }) {
         <Label role="caption" color={CHROME.textMuted}>
           {spine.routeEvents} route change{spine.routeEvents === 1 ? '' : 's'} seen at the navigation seam
         </Label>
-        {/* The cross-check, printed when it fails. A list that agrees with its own
-            count proves nothing; this is where a disagreement becomes visible. */}
-        {spine.routeEvents !== counts.observed ? (
+        {/* The cross-check, printed when it fails. The headline is the seam's tally
+            and this is the list's own length, so a disagreement between them is
+            evidence rather than a restatement. */}
+        {counts.listed !== counts.observed ? (
           <Label role="caption" color={TONE.degraded}>
-            the seam saw {spine.routeEvents} and the list holds {counts.observed} — the list is
-            drawing something it did not observe
+            the seam saw {counts.observed} and the list holds {counts.listed} — the list is drawing
+            something it did not observe
           </Label>
         ) : null}
       </View>
 
-      <View style={{ gap: 6 }}>
-        <Label role="caption" color={CHROME.textMuted}>
-          OBSERVED
-        </Label>
-        {observed.length === 0 ? (
-          <Label role="caption" color={CHROME.textMuted}>
-            none yet — press a card or an avatar on the board
-          </Label>
-        ) : (
-          observed.map((row, i) => <Row key={`${row.to}-${i}`} row={row} />)
-        )}
-      </View>
+      {onFocusChange ? <FramePicker focus={focus} onChange={onFocusChange} /> : null}
 
-      <View style={{ gap: 6 }}>
-        <Label role="caption" color={CHROME.textMuted}>
-          DECLARED
-        </Label>
-        <Label role="caption" color={CHROME.textMuted}>
-          read off the router directory, so the studio knows they exist without ever
-          having watched one
-        </Label>
-        {declared.map((row, i) => <Row key={`${row.to}-${i}`} row={row} />)}
-      </View>
+      {ROUTE_PROVENANCES.map((provenance) => {
+        const copy = ROUTE_PROVENANCE[provenance];
+        const section = rowsFor(provenance);
+
+        return (
+          <View key={provenance} style={{ gap: 6 }}>
+            <Label role="caption" color={CHROME.textMuted}>
+              {copy.label.toUpperCase()}
+            </Label>
+            <Label role="caption" color={CHROME.textMuted}>
+              {copy.note}
+            </Label>
+
+            {/* The gap is the unresolved section's content: a control with a count,
+                worded by `describeBackGap` so "none right now", "N unresolvable" and
+                "could not count them" never collapse into one line. */}
+            {provenance === 'unresolved' ? (
+              <View style={{ gap: 3 }}>
+                <Label role="caption" color={TONE[gapCopy.tone]} style={{ fontWeight: '600' }}>
+                  {gapCopy.label}
+                </Label>
+                <Label role="caption" color={CHROME.textMuted}>
+                  {gapCopy.detail}
+                </Label>
+                {focus !== null ? (
+                  <Label role="caption" color={CHROME.textMuted}>
+                    counted board-wide, so the studio cannot say which frames carry one
+                  </Label>
+                ) : null}
+                {gap.missingFrom.length > 0 ? (
+                  <Label role="caption" color={TONE.degraded}>
+                    {gap.missingFrom.length} frame{gap.missingFrom.length === 1 ? '' : 's'} did not mount, so
+                    this count is not the whole board
+                  </Label>
+                ) : null}
+              </View>
+            ) : section.length === 0 ? (
+              <Label role="caption" color={CHROME.textMuted}>
+                {copy.empty}
+              </Label>
+            ) : (
+              section.map((row, i) => <Row key={`${row.to}-${i}`} row={row} />)
+            )}
+          </View>
+        );
+      })}
 
       <View style={{ gap: 3 }}>
-        <Label role="caption" color={TONE[gapCopy.tone]} style={{ fontWeight: '600' }}>
-          {gapCopy.label}
-        </Label>
         <Label role="caption" color={CHROME.textMuted}>
-          {gapCopy.detail}
+          NO OUTGOING ROUTE OBSERVED
         </Label>
+        {exits.unobserved.length === 0 ? (
+          <Label role="caption" color={CHROME.textMuted}>
+            every screen off the tab bar has been seen navigating away from
+          </Label>
+        ) : (
+          <>
+            <Label role="caption" color={CHROME.textMuted}>
+              {exits.unobserved.map((key) => screens.find((s) => s.key === key)?.label ?? key).join(', ')}
+            </Label>
+            {/* What this list holds is absence of evidence, and it says so. Some of
+                these really are the app's exits; the rest have simply not been
+                pressed. Naming the difference is cheaper than being wrong about it. */}
+            <Label role="caption" color={CHROME.textMuted}>
+              {exits.measured
+                ? 'the studio never saw these navigate away from. Some are the app’s real exits and some have not been pressed, and from here the two look the same.'
+                : 'no route has been observed yet, so this is every screen the tab bar does not cover. Press a card or an avatar on the board and the ones that navigate will leave this list.'}
+            </Label>
+          </>
+        )}
+        {exits.viaTabBar.length > 0 ? (
+          <Label role="caption" color={CHROME.textMuted}>
+            {exits.viaTabBar.map((key) => screens.find((s) => s.key === key)?.label ?? key).join(', ')} are
+            off the tab bar, so their exits are declared from the router directory rather than watched
+          </Label>
+        ) : null}
       </View>
-
-      {exits.length > 0 ? (
-        <View style={{ gap: 3 }}>
-          <Label role="caption" color={CHROME.textMuted}>
-            NO OUTGOING ROUTE
-          </Label>
-          <Label role="caption" color={CHROME.textMuted}>
-            {exits.map((key) => screens.find((s) => s.key === key)?.label ?? key).join(', ')}
-          </Label>
-          <Label role="caption" color={CHROME.textMuted}>
-            these are the app&rsquo;s exits, and their absence from the lists above is a
-            fact about the app rather than missing data
-          </Label>
-        </View>
-      ) : null}
-    {gap.missingFrom?.length ? (
-        <Label role="caption" color={TONE.degraded}>
-          {gap.missingFrom.length} frame{gap.missingFrom.length === 1 ? '' : 's'} did not mount, so this
-          count is not the whole board
-        </Label>
-      ) : null}
     </View>
   );
 }

@@ -41,7 +41,9 @@
  * press report disagreeing is not a curiosity — it is the two halves telling the
  * truth from opposite sides, and the panel says so.
  *
- * Pure, and no runtime imports, so `test/routes.test.ts` can load it.
+ * These pure functions import the pure router-key helpers at runtime.
+ * Neither module requires React, a browser, or the token server to load.
+ * `test/routes.test.ts` loads it directly with the type-stripping runner.
  */
 
 import { tabKeys, routeOf, screenKeyOf } from './routerKeys.ts';
@@ -53,12 +55,55 @@ import type { Tone } from '../ds/reachability.ts';
  *
  * A union rather than a string, so a row cannot be constructed without one. The
  * compiler is not in CI, so the *runtime* table `ROUTE_PROVENANCE` is what
- * actually holds — and the panel iterates it, so a value added here shows up in
- * the UI without anyone remembering to add a fourth badge.
+ * actually holds — and the panel iterates that table, so a value added here shows
+ * up in the UI without anyone remembering to add a fourth badge.
  */
 export type RouteProvenance = 'observed' | 'declared' | 'unresolved';
 
-export const ROUTE_PROVENANCE: readonly RouteProvenance[] = ['observed', 'declared', 'unresolved'];
+/** What the panel prints for a provenance, and the colour it prints it in. */
+export type ProvenanceCopy = {
+  /** The badge on a row. Short enough for a 300px panel. */
+  label: string;
+  tone: Tone;
+  /** The section's own one-line explanation of how these routes were learned. */
+  note: string;
+  /** What the section says when it holds nothing. Never an empty field. */
+  empty: string;
+};
+
+/**
+ * The three provenances, as the one runtime table the panel renders from.
+ *
+ * `RoutePanel` maps over `ROUTE_PROVENANCES` and takes each section's heading,
+ * colour, explanation and empty-state wording out of here, so this is not
+ * documentation of the panel's behaviour — it *is* the panel's sections. A fourth
+ * provenance added to the union without a row here has no badge, no section and no
+ * count, and `test/routes.test.ts` fails on the mismatch rather than letting the
+ * panel quietly drop it.
+ */
+export const ROUTE_PROVENANCE: Record<RouteProvenance, ProvenanceCopy> = {
+  observed: {
+    label: 'observed',
+    tone: 'ok',
+    note: 'seen at the navigation seam, so the studio watched this one happen',
+    empty: 'none yet — press a card or an avatar on the board',
+  },
+  declared: {
+    label: 'declared',
+    tone: 'muted',
+    note: 'read off the router directory, so the studio knows they exist without ever having watched one',
+    empty: 'the router directory lists no destination this section could declare',
+  },
+  unresolved: {
+    label: 'unresolved',
+    tone: 'degraded',
+    note: 'a control that navigates, but decides where at press time, so there is no static edge to draw',
+    empty: 'no control on the board navigates in a way the studio cannot enumerate',
+  },
+};
+
+/** The table's keys, in the order the panel renders its sections. */
+export const ROUTE_PROVENANCES = Object.keys(ROUTE_PROVENANCE) as RouteProvenance[];
 
 export type RouteRow = {
   /** The screen key the change left, `(tabs)` for the tab bar, or null. */
@@ -98,7 +143,13 @@ export type RouteGap = {
 };
 
 /** The counts, which lead the list. */
-export type RouteCounts = { observed: number; declared: number; unresolved: number };
+export type RouteCounts = {
+  observed: number;
+  declared: number;
+  unresolved: number;
+  /** How many observed rows the list itself holds. The cross-check, not the claim. */
+  listed: number;
+};
 
 /**
  * The four tab destinations, declared from the router directory.
@@ -152,16 +203,31 @@ export function buildRouteList(entries: SpineEntry[], routerKeys: string[] = [])
 /**
  * Counts, and they lead the list.
  *
+ * ## Why `observed` can be an argument rather than a filter
+ *
+ * A count derived from the list's own length can never disagree with the list, so
+ * printing it proves nothing. The check that catches a list drawing routes it never
+ * saw has to compare it against a number gathered somewhere else, and
+ * `observedEvents` is that number: the seam's own tally, incremented as a route
+ * passes through and never read back off the rows. Pass it and the headline is
+ * independent. Omit it — a test, or a caller with no seam — and the count falls
+ * back to the list.
+ *
+ * `listed` rides along so the disagreement is a comparison the panel prints rather
+ * than a subtraction the reader performs.
+ *
  * `unresolved` is the number of gap **controls** on the board, not the number of
  * unresolved edges — because the back control cannot be resolved at all. Reporting
  * it as a count of edges would report zero, and a gap shown as zero reads as
  * "there are none".
  */
-export function routeCounts(rows: RouteRow[], gaps: RouteGap[] = []): RouteCounts {
+export function routeCounts(rows: RouteRow[], gaps: RouteGap[] = [], observedEvents?: number): RouteCounts {
+  const listed = rows.filter((r) => r.provenance === 'observed').length;
   return {
-    observed: rows.filter((r) => r.provenance === 'observed').length,
+    observed: observedEvents ?? listed,
     declared: rows.filter((r) => r.provenance === 'declared').length,
     unresolved: gaps.reduce((n, gap) => n + (gap.count ?? 0), 0),
+    listed,
   };
 }
 
@@ -218,18 +284,88 @@ export function describeBackGap(gap: RouteGap): GapCopy {
   };
 }
 
+/** Which screens the studio never saw navigate away from, and which it did. */
+export type ExitReport = {
+  /**
+   * Screen keys with no observed outgoing route, and no declared one either.
+   *
+   * Named as *not observed* rather than as exits. Absence of evidence is what this
+   * list holds: `settings` really does push nowhere, and `login` really does
+   * navigate to `/` — and until somebody presses on it, the studio cannot tell
+   * those two apart. Claiming it could is how the first version of this reported
+   * all seven screens as the app's exits on a fresh load, `login` among them.
+   */
+  unobserved: string[];
+  /** Tab screens. Their exits are declared from the router directory, not watched. */
+  viaTabBar: string[];
+  /** Screens the seam saw navigate away from. Evidence, not inference. */
+  observedExits: string[];
+  /** Whether the seam has seen a route change at all, so the lists above mean anything. */
+  measured: boolean;
+};
+
 /**
- * Screens with no outgoing route at all, named.
+ * The board's screens, split by what the studio knows about their exits.
  *
- * A screen with exits of its own needs no such note; a screen without them is
- * where the app's exits are, and leaving it as an absent row makes that
- * unreadable. `settings` is pushed to and pushes nowhere — that is a fact about
- * the app worth being able to see.
+ * Three buckets rather than one list, because they rest on different evidence. A
+ * tab screen has exits the directory listing proves; an observed screen has exits
+ * the seam watched; everything else has neither, and "neither" is not "none".
+ *
+ * `ide` is excluded: the studio is a route of this app rather than a screen of it,
+ * and it is not on the board.
  */
-export function screensWithoutExits(rows: RouteRow[], routerKeys: string[]): string[] {
-  const sources = new Set(rows.filter((r) => r.from !== null).map((r) => r.from as string));
-  return routerKeys
-    .map(screenKeyOf)
-    .filter((key) => !sources.has(key) && key !== 'ide')
-    .sort();
+export function exitReport(rows: RouteRow[], routerKeys: string[], observedEvents = 0): ExitReport {
+  const keys = [...new Set(routerKeys.map(screenKeyOf))].filter((key) => key !== 'ide').sort();
+  const onTabBar = new Set(tabKeys(routerKeys).map(screenKeyOf));
+  const sawExit = new Set(
+    rows.filter((r) => r.provenance === 'observed' && r.from !== null && r.from !== '(tabs)').map((r) => r.from as string),
+  );
+
+  const viaTabBar = keys.filter((key) => onTabBar.has(key));
+  const observedExits = keys.filter((key) => sawExit.has(key));
+  const unobserved = keys.filter((key) => !onTabBar.has(key) && !sawExit.has(key));
+
+  return { unobserved, viaTabBar, observedExits, measured: observedEvents > 0 || observedExits.length > 0 };
+}
+
+/** One frame's connections, for the panel's highlight-a-frame view. */
+export type FrameRoutes = {
+  /** Observed rows that left this frame. */
+  observed: RouteRow[];
+  /** Declared tab destinations, present only when this frame hosts the tab bar. */
+  declared: RouteRow[];
+  /** True when the frame is in the tab group, so it has exits the studio declared. */
+  hostsTabBar: boolean;
+  /**
+   * The board's unresolvable controls.
+   *
+   * Passed through for every frame rather than attributed to one: the back control
+   * is counted board-wide from the glyph it draws, so the studio cannot say which
+   * frames carry one, and picking a frame would be a guess. The panel says so.
+   */
+  gaps: RouteGap[];
+};
+
+/**
+ * The routes out of one frame.
+ *
+ * What makes highlighting a frame useful rather than decorative: a reader who wants
+ * one screen's connections gets that screen's connections, and gets told which of
+ * them were watched and which were read off a directory. A frame on the tab bar has
+ * four declared exits and possibly some observed ones; a frame that is not has only
+ * what the seam saw, which on a fresh load is nothing at all.
+ */
+export function routesOutOf(
+  rows: RouteRow[],
+  key: string,
+  routerKeys: string[],
+  gaps: RouteGap[] = [],
+): FrameRoutes {
+  const hostsTabBar = tabKeys(routerKeys).map(screenKeyOf).includes(key);
+  return {
+    observed: rows.filter((r) => r.provenance === 'observed' && r.from === key),
+    declared: hostsTabBar ? rows.filter((r) => r.provenance === 'declared') : [],
+    hostsTabBar,
+    gaps,
+  };
 }

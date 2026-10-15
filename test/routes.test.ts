@@ -31,12 +31,14 @@ import {
   backGap,
   describeBackGap,
   declaredTabRoutes,
-  screensWithoutExits,
+  exitReport,
+  routesOutOf,
   ROUTE_PROVENANCE,
+  ROUTE_PROVENANCES,
   type RouteRow,
 } from '../mobile/src/ide/routes.ts';
 import { ALL_ROUTER_KEYS } from './helpers/routerListing.ts';
-import { tabKeys } from '../mobile/src/ide/routerKeys.ts';
+import { screenKeyOf, tabKeys } from '../mobile/src/ide/routerKeys.ts';
 import { createSpine, spineReducer, type SpineEntry, type SpineInput } from '../mobile/src/ide/spine.ts';
 
 function observe(...inputs: SpineInput[]): SpineEntry[] {
@@ -44,11 +46,25 @@ function observe(...inputs: SpineInput[]): SpineEntry[] {
 }
 
 test('there are exactly three provenances, and no row can be built without one', () => {
-  assert.deepEqual([...ROUTE_PROVENANCE].sort(), ['declared', 'observed', 'unresolved']);
+  assert.deepEqual([...ROUTE_PROVENANCES].sort(), ['declared', 'observed', 'unresolved']);
   // The type is a union rather than a string, so this is a compile-time fact —
   // but the type is not enforced in CI, so the runtime table is the real one.
   for (const row of declaredTabRoutes(ALL_ROUTER_KEYS)) {
-    assert.ok(ROUTE_PROVENANCE.includes(row.provenance));
+    assert.ok(row.provenance in ROUTE_PROVENANCE);
+  }
+});
+
+test('the provenance table carries everything the panel needs to render a section', () => {
+  // This is the runtime check the spec asks for. The compiler is not in CI, so a
+  // fourth provenance added to the union would type-check, be counted by
+  // `routeCounts`, and never appear in the UI unless the table is what the panel
+  // renders from. Every entry has to be renderable on its own.
+  for (const provenance of ROUTE_PROVENANCES) {
+    const copy = ROUTE_PROVENANCE[provenance];
+    assert.equal(copy.label, provenance, 'the badge names the provenance it belongs to');
+    assert.ok(['ok', 'degraded', 'muted'].includes(copy.tone), `${provenance} has a tone the palette can draw`);
+    assert.ok(copy.note.length > 20, `${provenance} explains how its routes were learned`);
+    assert.ok(copy.empty.length > 10, `${provenance} says something when it holds nothing`);
   }
 });
 
@@ -138,8 +154,23 @@ test('the counts lead the list, and unresolved is a count of gap controls', () =
   );
 
   const rows = buildRouteList(entries, ALL_ROUTER_KEYS);
-  assert.deepEqual(routeCounts(rows, [backGap(2)]), { observed: 2, declared: 4, unresolved: 2 });
-  assert.deepEqual(routeCounts(rows), { observed: 2, declared: 4, unresolved: 0 });
+  assert.deepEqual(routeCounts(rows, [backGap(2)]), { observed: 2, declared: 4, unresolved: 2, listed: 2 });
+  assert.deepEqual(routeCounts(rows), { observed: 2, declared: 4, unresolved: 0, listed: 2 });
+});
+
+test('the headline observed count can come from somewhere other than the list', () => {
+  // A count taken from the list's own length can never disagree with the list, so
+  // printing it proves nothing. The seam keeps its own tally, and passing it in is
+  // what makes the cross-check capable of failing — which is the only reason to
+  // print a cross-check at all.
+  const rows = buildRouteList(
+    observe({ kind: 'route', from: 'index', to: '/profile', column: 'current' }, { kind: 'flush' }),
+    ALL_ROUTER_KEYS,
+  );
+
+  assert.equal(routeCounts(rows).observed, 1, 'with no seam the count falls back to the list');
+  assert.equal(routeCounts(rows, [], 3).observed, 3, 'the seam’s tally is the headline');
+  assert.equal(routeCounts(rows, [], 3).listed, 1, 'and the list’s own length rides along beside it');
 });
 
 test('the back control is unresolved, with a count, and is never drawn as an edge', () => {
@@ -180,18 +211,72 @@ test('the declared set and the board agree, because they come from one rule', ()
   }
 });
 
-test('a screen with no outgoing routes is named rather than left as an empty row', () => {
+test('a screen the studio never saw navigate is named, and not called an exit', () => {
   // Otherwise "Where are the app's exits?" has no answer, and an absent row reads
   // as "no data" rather than "no exits".
+  //
+  // The first version of this reported every screen with no *observed* outgoing
+  // route as one of the app's exits, which named `login` — a screen whose only
+  // control signs in and navigates to `/` — because nobody had pressed it yet.
+  // Absence of evidence is what the list holds, so it is reported as absence of
+  // evidence and the panel says which of the two readings is on offer.
   const rows = buildRouteList(
     observe({ kind: 'route', from: 'index', to: '/habit', column: 'current' }, { kind: 'flush' }),
     ALL_ROUTER_KEYS,
   );
 
-  const exits = screensWithoutExits(rows, ALL_ROUTER_KEYS);
-  assert.ok(exits.includes('login'), 'the login screen has no outgoing route');
-  assert.ok(!exits.includes('index'), 'the Today screen has three');
-  assert.equal(exits.includes('settings'), true, 'Settings is pushed to and nothing pushes onward');
+  const report = exitReport(rows, ALL_ROUTER_KEYS, 1);
+  assert.equal(report.measured, true, 'the seam has seen a route, so the buckets mean something');
+  assert.deepEqual(report.observedExits, ['index'], 'only what was watched is claimed as watched');
+  assert.ok(!report.unobserved.includes('index'), 'a screen seen navigating away from is not on this list');
+  assert.ok(report.unobserved.includes('settings'), 'Settings is pushed to and nothing pushes onward');
+  assert.ok(report.unobserved.includes('login'), 'login has not been pressed, so it has not been seen');
+});
+
+test('a tab screen is never reported as having no outgoing route', () => {
+  // Its exits are declared from the router directory: the tab bar reaches the
+  // router behind a guard in a byte-identical file, so the seam never sees them.
+  // Reporting those four as the app's exits would contradict the declared section
+  // printed a few lines above.
+  const report = exitReport([], ALL_ROUTER_KEYS, 0);
+  const onTabBar = tabKeys(ALL_ROUTER_KEYS).map(screenKeyOf);
+
+  assert.deepEqual(report.viaTabBar, onTabBar);
+  assert.equal(report.measured, false, 'nothing has been observed, and the report says so');
+  for (const key of onTabBar) {
+    assert.ok(!report.unobserved.includes(key), `${key} is on the tab bar, so it has declared exits`);
+  }
+  // Every screen on the board is in exactly one bucket, so none can be dropped.
+  const buckets = [...report.unobserved, ...report.viaTabBar, ...report.observedExits];
+  assert.equal(new Set(buckets).size, buckets.length, 'a screen landed in two buckets');
+});
+
+test('highlighting a frame narrows the list to that frame’s connections', () => {
+  // Story 30. A list of every route answers "how does the app connect"; the
+  // question a reader arrives with is usually "what can I reach from *here*".
+  const rows = buildRouteList(
+    observe(
+      { kind: 'route', from: 'index', to: '/habit', column: 'current' },
+      { kind: 'flush' },
+      { kind: 'route', from: 'profile', to: '/settings', column: 'current' },
+      { kind: 'flush' },
+    ),
+    ALL_ROUTER_KEYS,
+  );
+
+  const fromIndex = routesOutOf(rows, 'index', ALL_ROUTER_KEYS, [backGap(2)]);
+  assert.deepEqual(fromIndex.observed.map((r) => r.to), ['/habit'], 'only this frame’s own departures');
+  assert.equal(fromIndex.hostsTabBar, true, 'Today is on the tab bar');
+  assert.equal(fromIndex.declared.length, tabKeys(ALL_ROUTER_KEYS).length, 'so its declared exits come with it');
+
+  // A frame off the tab bar has no declared exits to show, and the studio says so
+  // by showing nothing rather than by borrowing the tab bar's.
+  const fromSettings = routesOutOf(rows, 'settings', ALL_ROUTER_KEYS, [backGap(2)]);
+  assert.equal(fromSettings.hostsTabBar, false);
+  assert.deepEqual(fromSettings.declared, []);
+  assert.deepEqual(fromSettings.observed, [], 'never pressed, so never observed leaving');
+  // The back control is counted board-wide, so it is passed through unattributed.
+  assert.equal(fromSettings.gaps.length, 1);
 });
 
 test('the list is newest first, so the change just caused is the one on screen', () => {
