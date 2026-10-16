@@ -1,7 +1,7 @@
 # 04 — Create the Mixpanel project
 
 Type: task (HITL)
-Status: open
+Status: resolved
 Blocked by: —
 Map: ../map.md
 
@@ -34,3 +34,11 @@ Checklist:
 
 Resolve by recording: project name, region, where the token lives, and
 whether the repo secrets were set. Never paste the token into this file.
+
+## Answer
+
+- Project: `mobile-development-environment` (project ID 4074212, organization `personal`)
+- Region: `us`
+- Token: `mobile/.env.local` as `EXPO_PUBLIC_MIXPANEL_TOKEN`. Git ignores that file.
+- Repository secrets `MIXPANEL_TOKEN` and `MIXPANEL_REGION`: not set. The public build says "not sending" until the implementation ticket adds them.
+- Resolved: 2026-10-16
