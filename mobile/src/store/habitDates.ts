@@ -6,6 +6,7 @@ export const day = (offset: number) => {
 export const today = () => day(0);
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function dateLabel(iso: string): string {
@@ -18,4 +19,9 @@ export function weekDays(): { iso: string; weekday: string }[] {
     const iso = day(6 - i);
     return { iso, weekday: WEEKDAYS[new Date(iso).getUTCDay()] };
   });
+}
+
+/** Full weekday name for a demo date, read in UTC so the label is the same in every timezone. */
+export function weekdayLong(iso: string): string {
+  return WEEKDAYS_LONG[new Date(iso).getUTCDay()];
 }
