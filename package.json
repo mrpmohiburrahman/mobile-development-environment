@@ -4,6 +4,7 @@
   "description": "A design-token studio that lives inside an Expo app and writes its edits back to the codebase",
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test:analytics": "node browser/analytics-tab.mjs",
     "guard": "bash scripts/guard.sh",
     "tokens": "node token-server/index.mjs",
     "export:web": "bash scripts/export-web.sh",
@@ -11,5 +12,8 @@
     "web": "cd mobile && npx expo start --web",
     "ios": "cd mobile && npx expo start --ios"
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
+  "devDependencies": {
+    "playwright": "1.58.0"
+  }
 }

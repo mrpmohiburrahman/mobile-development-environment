@@ -9,6 +9,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+browser/out/
 *.log
 .DS_Store
 

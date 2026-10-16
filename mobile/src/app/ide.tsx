@@ -6,13 +6,14 @@ import { Blueprint } from '../ide/Blueprint';
 import { StatePanel } from '../ide/StatePanel';
 import { RoutePanel } from '../ide/RoutePanel';
 import { TokenPanel } from '../ide/TokenPanel';
+import { AnalyticsPanel } from '../ide/AnalyticsPanel';
 import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
 import { Drifted, useScreenDrift } from '../ide/ScreenDriftPanel';
 import { attachSpine } from '../ide/spineStore';
 import { CHROME, chipStyle } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
-type Tab = 'tokens' | 'state' | 'routes' | 'baseline';
+type Tab = 'tokens' | 'state' | 'routes' | 'baseline' | 'analytics';
 
 /**
  * The tabs, in the order they are drawn.
@@ -22,7 +23,7 @@ type Tab = 'tokens' | 'state' | 'routes' | 'baseline';
  * cascade over the same union, so adding a tab meant editing two unrelated
  * expressions and a missing case in either was silent.
  */
-const TABS: Tab[] = ['tokens', 'state', 'routes', 'baseline'];
+const TABS: Tab[] = ['tokens', 'state', 'routes', 'baseline', 'analytics'];
 
 /**
  * The studio. This is a route in the mobile app, not a separate project — which
@@ -75,6 +76,7 @@ export default function IDE() {
     tokens: <TokenPanel />,
     state: <StatePanel />,
     routes: <RoutePanel host={rootRef} focus={focus} onFocusChange={setFocus} />,
+    analytics: <AnalyticsPanel />,
     baseline: (
       <View style={{ gap: 18 }}>
         {/* Two levels of the same comparison: which tokens differ, then
@@ -93,15 +95,17 @@ export default function IDE() {
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: CHROME.bg }}>
       <View style={{ width: 300, borderRightWidth: 1, borderRightColor: CHROME.border }}>
-        <View style={{ flexDirection: 'row', gap: 6, padding: 12 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 12 }}>
           {TABS.map((name) => (
             <Pressable
               key={name}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === name }}
               onPress={() => setTab(name)}
-              style={({ pressed }) => chipStyle({ active: tab === name, pressed, size: 'regular' }).container}>
+              style={({ pressed }) => chipStyle({ active: tab === name, pressed, size: 'compact' }).container}>
               <Label
                 role="caption"
-                color={chipStyle({ active: tab === name, pressed: false, size: 'regular' }).textColor}>
+                color={chipStyle({ active: tab === name, pressed: false, size: 'compact' }).textColor}>
                 {name}
               </Label>
             </Pressable>
