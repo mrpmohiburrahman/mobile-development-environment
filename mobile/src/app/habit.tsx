@@ -1,9 +1,8 @@
 import { View } from 'react-native';
 import { streak, today, useHabits } from '../store/habits';
+import { weekdayLong } from '../store/habitDates';
 import { useTheme } from '../ds/store';
 import { BackBar, Button, Card, Chip, Divider, Meter, Row, Screen, Text } from '../ui';
-
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function HabitDetail() {
   const t = useTheme();
@@ -78,7 +77,7 @@ export default function HabitDetail() {
             <Row style={{ justifyContent: 'space-between', paddingVertical: t.space.sm }}>
               <Row style={{ gap: t.space.sm }}>
                 <Text role="body" style={{ fontWeight: '600', textTransform: 'none' }}>
-                  {WEEKDAYS[new Date(d).getDay()]}
+                  {weekdayLong(d)}
                 </Text>
                 <Text role="caption" color="textMuted">
                   {d.slice(0, 10)}
