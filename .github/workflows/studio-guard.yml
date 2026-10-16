@@ -1,8 +1,10 @@
 name: studio-guard
 
 # The studio's credibility depends on the app tree staying byte-identical while
-# the studio grows around it. The studio renders real screens to make its claims
-# demonstrable; if it can edit those screens, the rendering proves nothing.
+# the studio grows around it, unless a commit explicitly permits a named file
+# and gives a reason via a `Guard-Allow: <path> -- <reason>` trailer. The studio
+# renders real screens to make its claims demonstrable; if it can quietly edit
+# those screens, the rendering proves nothing.
 #
 # scripts/guard.sh holds the logic and is covered by test/guard.test.ts. This
 # workflow only decides which range to check and surfaces the result.

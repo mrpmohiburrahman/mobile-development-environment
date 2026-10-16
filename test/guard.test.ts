@@ -37,8 +37,9 @@ type Changes = Record<string, string | null>;
 
 function makeRepo(): {
   dir: string;
-  commit: (files: Changes) => void;
-  commitOn: (branch: string, files: Changes) => void;
+  git: (...args: string[]) => string;
+  commit: (files: Changes, message?: string) => void;
+  commitOn: (branch: string, files: Changes, message?: string) => void;
   checkout: (branch: string) => void;
 } {
   const dir = mkdtempSync(join(tmpdir(), 'guard-test-'));
@@ -51,6 +52,7 @@ function makeRepo(): {
   git('config', 'user.email', 'guard@example.invalid');
   git('config', 'user.name', 'Guard Test');
   git('config', 'commit.gpgsign', 'false');
+  git('config', 'core.hooksPath', '/dev/null');
 
   // The tree the guard protects, present on main.
   const base: Record<string, string> = {
@@ -74,20 +76,21 @@ function makeRepo(): {
     git('checkout', '--quiet', branch);
   }
 
-  function commitOn(branch: string, files: Changes) {
+  function commitOn(branch: string, files: Changes, message = 'studio: change') {
     checkout(branch);
     writeTree(dir, files);
     git('add', '-A');
-    git('commit', '--quiet', '-m', 'studio: change');
+    git('commit', '--quiet', '-m', message);
   }
 
   return {
     dir,
+    git,
     checkout,
     // `null` means delete. Renames across the guard boundary are the case this
     // test suite most needs to get right, and a helper that cannot delete
     // cannot express one.
-    commit: (files) => commitOn('studio', files),
+    commit: (files, message) => commitOn('studio', files, message),
     commitOn,
   };
 }
@@ -242,10 +245,11 @@ test('the three-dot range ignores drift already on main', () => {
   // protected files on main still in some agreed state". Two-dot would conflate
   // the two and blame a branch for someone else's commit; the merge-base
   // semantics are the whole reason the range is spelled with three dots.
-  withRepo(({ dir, commit, commitOn }) => {
+  withRepo(({ dir, commit, commitOn, checkout }) => {
     commit({ 'token-server/index.mjs': 'export const server = 2;\n' });
     // main moves on independently; studio never picks this commit up.
     commitOn('main', { 'mobile/src/ui/Card.tsx': 'export const Card = 99;\n' });
+    checkout('studio');
 
     // main is ahead with a guarded-file edit; the studio branch does not
     // contain it, so the studio branch did not break the guard.
@@ -323,5 +327,161 @@ test('the guard script exists and is executable via bash', () => {
     // were deleted while the workflow kept calling it.
     const result = runGuard(dir);
     assert.equal(result.code, 0, result.stdout);
+  });
+});
+
+test('a Guard-Allow trailer permits the named guarded file and lists its reason', () => {
+  withRepo(({ dir, commit, checkout }) => {
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): adjust index\n\nGuard-Allow: mobile/src/app/index.tsx -- fix the weekday label',
+    );
+    checkout('studio');
+    const result = runGuard(dir, 'main...HEAD');
+    assert.equal(result.code, 0, result.stdout);
+    assert.match(result.stdout, /guard: OK — main\.\.\.HEAD changed only permitted files:/);
+    assert.match(result.stdout, /mobile\/src\/app\/index\.tsx.*fix the weekday label/);
+  });
+});
+
+test('a Guard-Allow trailer without a reason fails the guard', () => {
+  withRepo(({ dir, commit, checkout }) => {
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): adjust index\n\nGuard-Allow: mobile/src/app/index.tsx',
+    );
+    checkout('studio');
+    const missingSeparator = runGuard(dir, 'main...HEAD');
+    assert.equal(missingSeparator.code, 1);
+    assert.match(
+      missingSeparator.stdout,
+      /guard: BROKEN — Guard-Allow for mobile\/src\/app\/index\.tsx has no reason\./,
+    );
+  });
+
+  withRepo(({ dir, commit, checkout }) => {
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): adjust index\n\nGuard-Allow: mobile/src/app/index.tsx --   ',
+    );
+    checkout('studio');
+    const blankReason = runGuard(dir, 'main...HEAD');
+    assert.equal(blankReason.code, 1);
+    assert.match(
+      blankReason.stdout,
+      /guard: BROKEN — Guard-Allow for mobile\/src\/app\/index\.tsx has no reason\./,
+    );
+  });
+});
+
+test('a Guard-Allow trailer for one file does not permit a second file or a directory prefix', () => {
+  withRepo(({ dir, commit, checkout }) => {
+    commit(
+      {
+        'mobile/src/app/index.tsx': 'export const Index = 2;\n',
+        'mobile/src/ui/Card.tsx': 'export const Card = 2;\n',
+      },
+      'fix(app): adjust index\n\nGuard-Allow: mobile/src/app/index.tsx -- fix the weekday label',
+    );
+    checkout('studio');
+    const result = runGuard(dir, 'main...HEAD');
+    assert.equal(result.code, 1);
+    assert.deepEqual(offendingFiles(result.stdout), ['mobile/src/ui/Card.tsx']);
+    assert.match(result.stdout, /Guard-Allow: <path> -- <reason>/);
+  });
+
+  withRepo(({ dir, commit, checkout }) => {
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): adjust index\n\nGuard-Allow: mobile/src/app -- directory prefix is not an exact path',
+    );
+    checkout('studio');
+    const result = runGuard(dir, 'main...HEAD');
+    assert.equal(result.code, 1);
+    assert.deepEqual(offendingFiles(result.stdout), ['mobile/src/app/index.tsx']);
+  });
+});
+
+test('a permission from merged history or base-only commits does not permit a later branch', () => {
+  withRepo(({ dir, git, commit, commitOn, checkout }) => {
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): first permitted edit\n\nGuard-Allow: mobile/src/app/index.tsx -- initial fix',
+    );
+    checkout('studio');
+    assert.equal(runGuard(dir, 'main...HEAD').code, 0);
+
+    checkout('main');
+    git('merge', '--quiet', '--no-ff', 'studio', '-m', 'Merge branch studio');
+    git('checkout', '--quiet', '-b', 'later');
+    commitOn('later', { 'mobile/src/app/index.tsx': 'export const Index = 3;\n' }, 'feat: unpermitted follow-up');
+    checkout('later');
+    const afterMerge = runGuard(dir, 'main...HEAD');
+    assert.equal(afterMerge.code, 1);
+    assert.deepEqual(offendingFiles(afterMerge.stdout), ['mobile/src/app/index.tsx']);
+  });
+
+  withRepo(({ dir, commit, commitOn, checkout }) => {
+    commit({ 'mobile/src/app/index.tsx': 'export const Index = 2;\n' }, 'feat: studio edit without trailer');
+    commitOn(
+      'main',
+      { 'mobile/src/app/_layout.tsx': 'export const Layout = 2;\n' },
+      'fix(main): base edit\n\nGuard-Allow: mobile/src/app/index.tsx -- base-only trailer',
+    );
+    checkout('studio');
+    const result = runGuard(dir, 'main...HEAD');
+    assert.equal(result.code, 1);
+    assert.deepEqual(offendingFiles(result.stdout), ['mobile/src/app/index.tsx']);
+  });
+});
+
+test('a single-reference worktree check does not treat historical trailers as permission', () => {
+  withRepo(({ dir, commitOn, checkout }) => {
+    commitOn(
+      'main',
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): permitted on main\n\nGuard-Allow: mobile/src/app/index.tsx -- earlier fix',
+    );
+    checkout('main');
+    assert.equal(runGuard(dir, 'HEAD').code, 0);
+
+    writeTree(dir, { 'mobile/src/app/index.tsx': 'export const Index = 3;\n' });
+    const dirty = runGuard(dir, 'HEAD');
+    assert.equal(dirty.code, 1);
+    assert.deepEqual(offendingFiles(dirty.stdout), ['mobile/src/app/index.tsx']);
+  });
+});
+
+test('the push range $before...HEAD passes merge and squash commits that keep Guard-Allow trailers', () => {
+  withRepo(({ dir, git, commit, checkout }) => {
+    const before = git('rev-parse', 'main').trim();
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): permitted edit\n\nGuard-Allow: mobile/src/app/index.tsx -- fix the weekday label',
+    );
+    checkout('main');
+    git('merge', '--quiet', '--no-ff', 'studio', '-m', 'Merge branch studio');
+    const mergePush = runGuard(dir, `${before}...HEAD`);
+    assert.equal(mergePush.code, 0, mergePush.stdout);
+    assert.match(mergePush.stdout, /mobile\/src\/app\/index\.tsx — fix the weekday label/);
+  });
+
+  withRepo(({ dir, git, commit, checkout }) => {
+    const before = git('rev-parse', 'main').trim();
+    commit(
+      { 'mobile/src/app/index.tsx': 'export const Index = 2;\n' },
+      'fix(app): permitted edit\n\nGuard-Allow: mobile/src/app/index.tsx -- fix the weekday label',
+    );
+    checkout('main');
+    git('merge', '--quiet', '--squash', 'studio');
+    git(
+      'commit',
+      '--quiet',
+      '-m',
+      'fix(app): squash merge\n\nGuard-Allow: mobile/src/app/index.tsx -- fix the weekday label',
+    );
+    const squashPush = runGuard(dir, `${before}...HEAD`);
+    assert.equal(squashPush.code, 0, squashPush.stdout);
+    assert.match(squashPush.stdout, /mobile\/src\/app\/index\.tsx — fix the weekday label/);
   });
 });
