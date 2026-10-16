@@ -129,7 +129,7 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 | 12 | [Guard permission trailers](issues/12-guard-permission-trailers.md) | task | — (resolved) |
 | 13 | [Board in the normal studio](issues/13-board-in-the-normal-studio.md) | task | — |
 | 14 | [Bundled font](issues/14-bundled-font.md) | task | — |
-| 15 | [Analytics sender](issues/15-analytics-sender.md) | task | — |
+| 15 | [Analytics sender](issues/15-analytics-sender.md) | task | — (resolved) |
 | 16 | [Weekday fix and layout hook](issues/16-weekday-fix-and-layout-hook.md) | task | 12, 15 |
 | 17 | [Capture mode](issues/17-capture-mode.md) | task | 13, 14 |
 | 18 | [Present mode](issues/18-present-mode.md) | task | 13 |
@@ -143,4 +143,4 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: 13, 14, and 15.** 12 is resolved. 16 waits on 15. 17 waits on 13 and 14. 18 waits on 13. 19 waits on 15. 20 waits on 16 and 17. 21 waits on 20. 22 waits on 18. 23 waits on 16, 19, 20, 21, and 22.
+**Frontier: 13, 14, 16, and 19.** 12 and 15 are resolved. 17 waits on 13 and 14. 18 waits on 13. 20 waits on 16 and 17. 21 waits on 20. 22 waits on 18. 23 waits on 16, 19, 20, 21, and 22.
