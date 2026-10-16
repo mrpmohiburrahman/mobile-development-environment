@@ -31,6 +31,13 @@ function uuid(): string {
   return uuidFrom(Math.random);
 }
 
+let studioRoute = false;
+
+/** The route observer reports whether the device is showing the studio. */
+export function setStudioRoute(active: boolean): void {
+  studioRoute = active;
+}
+
 export const analytics = createAnalytics({
   platform: Platform.OS,
   config: readConfig({
@@ -43,6 +50,7 @@ export const analytics = createAnalytics({
     get: (key) => AsyncStorage.getItem(key),
     set: (key, value) => AsyncStorage.setItem(key, value),
   },
+  onStudioRoute: () => studioRoute,
   send: async (request) => {
     const res = await fetch(request.url, {
       method: 'POST',

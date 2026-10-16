@@ -21,7 +21,7 @@
  *   spec rules a durable offline queue out of scope.
  * - `refused`: this sender decided not to try. `web` is the ADR 0003 guard,
  *   `not-configured` is an absent token, `unknown-region` is a region that maps
- *   to no host. An unknown region must not fall back to the US host, because
+ *   to no host, `studio-route` is a device showing the developer's studio. An unknown region must not fall back to the US host, because
  *   the US host answers `status: 1` for a token from another region and the
  *   events vanish.
  */
@@ -64,13 +64,19 @@ export type Adapters = {
   };
   /** One HTTP POST. May throw; the sender catches. */
   send: (request: TrackRequest) => Promise<TrackResponse>;
+  /**
+   * True while the visible route is studio-only (`/ide` on a device). Actions
+   * inside a studio frame are the developer's, not a user's. Optional: a
+   * sender with no route knowledge never suppresses.
+   */
+  onStudioRoute?: () => boolean;
 };
 
 export type Outcome =
   | { kind: 'accepted' }
   | { kind: 'rejected'; error: string }
   | { kind: 'unsent'; error: string }
-  | { kind: 'refused'; reason: 'web' | 'not-configured' | 'unknown-region' };
+  | { kind: 'refused'; reason: 'web' | 'not-configured' | 'unknown-region' | 'studio-route' };
 
 export type Analytics = {
   /** Never rejects. The outcome is for diagnostics; callers may ignore it. */
@@ -153,6 +159,7 @@ export function createAnalytics(adapters: Adapters): Analytics {
     if (config === null) return { kind: 'refused', reason: 'not-configured' };
     const host = hostForRegion(config.region);
     if (host === null) return { kind: 'refused', reason: 'unknown-region' };
+    if (adapters.onStudioRoute?.()) return { kind: 'refused', reason: 'studio-route' };
 
     identity ??= loadIdentity();
     let installId: string;

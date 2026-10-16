@@ -112,6 +112,21 @@ test('an unknown region reports itself and sends nothing', async () => {
   assert.equal(h.requests.length, 0);
 });
 
+test('a device showing the studio sends nothing, and resumes when the studio closes', async () => {
+  let studio = false;
+  const h = harness({ onStudioRoute: () => studio });
+  const analytics = createAnalytics(h.adapters);
+  studio = true;
+  assert.deepEqual(await analytics.track('Habit Toggled', { habit_id: 'h1', done: true }), {
+    kind: 'refused',
+    reason: 'studio-route',
+  });
+  assert.equal(h.storageReads, 0, 'refusal happens before identity');
+  studio = false;
+  assert.deepEqual(await analytics.track('Habit Toggled', { habit_id: 'h1', done: true }), { kind: 'accepted' });
+  assert.equal(h.requests.length, 1);
+});
+
 test('the request goes to the regional host as a form-encoded /track call', async () => {
   const h = harness({ config: { token: 'tok-123', region: 'eu' } });
   await createAnalytics(h.adapters).track('Signed Out');
