@@ -41,3 +41,7 @@ example
 # generated native folders
 /ios
 /android
+
+# env files: EXPO_PUBLIC_MIXPANEL_* live in .env.local, never in git
+.env
+.env.*
