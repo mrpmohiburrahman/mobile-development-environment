@@ -76,3 +76,35 @@ Run on 2026-10-18 in this worktree.
 The debounce interval is a fixed 400 ms constant. Copy link shows its result on the button. These answers close the two open questions from ticket 06.
 
 The banner text follows ASD-STE100. It does not use the ticket 06 sentences word for word.
+
+## Review fix (2026-10-18)
+
+A second review found two defects and one verification gap.
+
+- Zoom now keeps the screen key. Scale is not part of a link, but the focused screen is. Pan, Fit, Reset layout, and the `0` key clear it.
+- `panBy` and pointer movement return while the board presents. Present entry clears board and frame drags and releases pointer capture.
+- The Copy link test pauses the browser clock before a token edit. The address bar keeps the earlier value until Copy link runs.
+- The test reads the clipboard before the 400 ms timer runs. It then opens that exact link in a fresh context.
+- The receiving screen must show the copied `color.light.bg` value. The test also checks the decoded state.
+- A zoom test copies a link after Zoom to 100%. A fresh context must show the same screen.
+- A pan test enters Present mode while the pointer remains down. Further movement must preserve the screen and the Exit control.
+- The fix removes new review comments. It restores pre-existing comments that the earlier edit removed.
+
+### Current verification
+
+The following checks passed for this revision:
+
+- `npm test`: 456 tests passed.
+- `npx tsc --noEmit` in `mobile/`: passed.
+- `npm run lint -- --no-cache` in `mobile/`: passed.
+- `npm run export:web -- --max-workers 2`: passed. The export contains 14 pages and four assets.
+- `npm run test:share`: passed, including the paused-clock Copy link check and the copied-background check in a fresh context.
+- `npm run test:present`: passed, including Present entry during a pan and pointer movement after entry.
+- `npm run test:board`: passed.
+- `npm run guard -- 3fe2979`: passed. No guarded file changed.
+
+The checks ran sequentially with the owner's approval. The analytics browser suite did not run because it requires two additional builds.
+
+Memory pressure readings reported 38% to 43% free during verification. System swap use increased from 2178 MiB to 2554 MiB. Other projects also ran on this Mac. These readings do not isolate this task's memory use.
+
+`time -l` reported about 932 MiB maximum resident size for the export command. This is not an aggregate peak for all build processes. Dependency manifests and lockfiles did not change.
