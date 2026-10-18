@@ -68,6 +68,41 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await board.getAttribute('data-presenting'), 'false');
 
+  await page.evaluate(() => document.activeElement?.blur());
+  const emptyCanvas = await page.evaluate(() => {
+    const rect = document.querySelector('.mp-viewport')?.getBoundingClientRect();
+    if (!rect) return null;
+    for (let y = rect.top + 80; y < rect.bottom - 80; y += 40) {
+      for (let x = rect.left + 24; x < rect.right - 80; x += 40) {
+        const el = document.elementFromPoint(x, y);
+        if (el?.closest('.mp-viewport') && !el.closest('.mp-frame, .mp-flybar, .mp-canvas-controls')) return { x, y };
+      }
+    }
+    return null;
+  });
+  assert.ok(emptyCanvas, 'The board must have space for the pan check.');
+  await page.mouse.move(emptyCanvas.x, emptyCanvas.y);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(emptyCanvas.x + 12, emptyCanvas.y + 12);
+    assert.equal(await page.locator('.mp-viewport').getAttribute('data-panning'), 'true');
+    await page.keyboard.press('p');
+    assert.equal(await board.getAttribute('data-presenting'), 'true');
+    const key = await presented();
+    assert.ok(key, 'Present mode must select a screen during a pan.');
+    const transform = await page.locator('.mp-world').getAttribute('style');
+    await page.mouse.move(emptyCanvas.x + 48, emptyCanvas.y + 48);
+    assert.equal(await presented(), key, 'Pointer movement must preserve the presented screen.');
+    assert.equal(await page.locator('.mp-world').getAttribute('style'), transform, 'Pointer movement must not move the presented surface.');
+    assert.equal(await page.locator('.mp-viewport').getAttribute('data-panning'), 'false');
+    assert.equal(await page.locator(`#screen-${key}`).isVisible(), true);
+    assert.equal(await presentBar.getByRole('button', { name: 'Exit', exact: true }).isVisible(), true);
+  } finally {
+    await page.mouse.up();
+  }
+  await page.keyboard.press('Escape');
+  assert.equal(await board.getAttribute('data-presenting'), 'false');
+
   // The camera's current screen is the presented one; entry never resets.
   await board.getByRole('group', { name: 'Fly to screen' }).getByRole('button', { name: 'Habit detail', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('.mp-world')?.dataset.flying === 'false');

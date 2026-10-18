@@ -43,8 +43,6 @@ export const SHARE_PARAM = 's';
 export const MAX_PAYLOAD_CHARS = 16_384;
 export const MAX_JSON_CHARS = 65_536;
 
-// Banner text is a user-facing string, so it follows ASD-STE100: active
-// voice, simple present tense, one statement per sentence.
 export const SHARE_WARNINGS = {
   unsupported:
     'This browser does not support shared links. The URL does not show your edits. Copy link is not available.',
@@ -57,12 +55,10 @@ export const SHARE_WARNINGS = {
   present: 'The studio does not know the present flag in this link. The studio shows the board.',
 } as const;
 
-/** The banner sentence for overrides this build refused, counted as rejected. */
 export function overridesWarning(rejected: number, total: number): string {
   return `The studio cannot apply ${rejected} of ${total} token overrides in this link. It shows the committed values for those tokens.`;
 }
 
-/** True when this browser has both compression streams that the format needs. */
 export function compressionSupported(): boolean {
   const scope = globalThis as { CompressionStream?: unknown; DecompressionStream?: unknown };
   return typeof scope.CompressionStream === 'function' && typeof scope.DecompressionStream === 'function';
@@ -218,8 +214,6 @@ export function sharePayloadFromHash(hash: string): string | null {
   return new URLSearchParams(raw).get(SHARE_PARAM);
 }
 
-// The DOM and Node stream typings disagree about `pipeThrough`. The runtime
-// contract is a CompressionStream or DecompressionStream constructor.
 type DeflateCodec = new (format: 'deflate') => {
   readable: ReadableStream<Uint8Array>;
   writable: WritableStream<Uint8Array>;
@@ -229,7 +223,6 @@ function codecOf(name: 'CompressionStream' | 'DecompressionStream'): DeflateCode
   return (globalThis as unknown as Record<string, DeflateCodec>)[name];
 }
 
-/** `bytes` piped through one deflate codec, as a readable stream. */
 function deflateStream(bytes: Uint8Array, Codec: DeflateCodec): ReadableStream<Uint8Array> {
   return new Blob([bytes as BlobPart]).stream().pipeThrough(new Codec('deflate'));
 }
@@ -274,10 +267,6 @@ async function inflate(bytes: Uint8Array, limit: number): Promise<Uint8Array | n
   }
 }
 
-/**
- * `state` → `#s=` value. A default view encodes to null, because the URL then
- * carries no fragment. Also null when this browser cannot compress.
- */
 export async function encodeShareState(state: ShareState): Promise<string | null> {
   if (isDefaultShareState(state) || !compressionSupported()) return null;
   const bytes = new TextEncoder().encode(JSON.stringify(shareJsonOf(state)));
@@ -285,7 +274,6 @@ export async function encodeShareState(state: ShareState): Promise<string | null
   return compressed ? base64urlEncode(compressed) : null;
 }
 
-/** The URL for `payload` on top of `base` (path and query), or `base` alone. */
 export function shareHref(base: string, payload: string | null): string {
   return payload ? `${base}#${SHARE_PARAM}=${payload}` : base;
 }

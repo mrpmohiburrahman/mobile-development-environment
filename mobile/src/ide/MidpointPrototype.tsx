@@ -228,12 +228,40 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     setView({ k: k2, x: el.clientWidth / 2 - (bounds.minX + bw / 2) * k2, y: el.clientHeight / 2 - (bounds.minY + bh / 2) * k2 });
   }, [bounds]);
 
-  // The camera screen is the one a flight targeted. Any other camera move
-  // leaves it, so the screen key in a shared link never names a screen the
-  // viewer has left. Present entry then picks the nearest frame.
   const leaveCameraScreen = useCallback(() => {
     if (useScreenState.getState().presentedKey !== null) setPresentedKey(null);
   }, [setPresentedKey]);
+
+  const enterPresent = useCallback(() => {
+    const pointerId = drag.current?.id;
+    if (pointerId !== undefined && viewport.current?.hasPointerCapture(pointerId)) {
+      viewport.current.releasePointerCapture(pointerId);
+    }
+    drag.current = null;
+    frameDrag.current = null;
+    spaceHeld.current = false;
+    setPanning(false);
+    setDragged(null);
+    setSpace(false);
+    const current = useScreenState.getState().presentedKey;
+    if (current) {
+      setPresenting(true);
+      return;
+    }
+    const el = viewport.current;
+    if (!el || !view) {
+      setPresenting(true);
+      return;
+    }
+    const centerX = (el.clientWidth / 2 - view.x) / view.k;
+    const centerY = (el.clientHeight / 2 - view.y) / view.k;
+    const keys = screens.map((screen) => screen.key);
+    const centers = Object.fromEntries(keys.map((key) => [key, centerOf(key)]));
+    const key = nearestScreenToPoint(centers, keys, { x: centerX, y: centerY });
+    if (key) setPresentedKey(key);
+    setPresenting(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, rowY, positions, setPresentedKey, setPresenting]);
 
   const flyTo = useCallback((key: string | null, targetK?: number) => {
     const el = viewport.current;
@@ -292,26 +320,6 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     return () => window.removeEventListener('keydown', decide);
   }, [presenting, setPresentedKey, setScheme, setPresenting]);
 
-  const enterPresent = useCallback(() => {
-    const current = useScreenState.getState().presentedKey;
-    if (current) {
-      setPresenting(true);
-      return;
-    }
-    const el = viewport.current;
-    if (!el || !view) {
-      setPresenting(true);
-      return;
-    }
-    const centerX = (el.clientWidth / 2 - view.x) / view.k;
-    const centerY = (el.clientHeight / 2 - view.y) / view.k;
-    const keys = screens.map((screen) => screen.key);
-    const centers = Object.fromEntries(keys.map((key) => [key, centerOf(key)]));
-    const key = nearestScreenToPoint(centers, keys, { x: centerX, y: centerY });
-    if (key) setPresentedKey(key);
-    setPresenting(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, rowY, positions, setPresentedKey, setPresenting]);
 
   useEffect(() => {
     if (!navigationTarget) return;
@@ -335,7 +343,6 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const px = cx - rect.left, py = cy - rect.top;
-    leaveCameraScreen();
     setFitMode(false);
     setView((v) => {
       const cur = v ?? { x: 0, y: 0, k: 0.4 };
@@ -343,9 +350,10 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       const wx = (px - cur.x) / cur.k, wy = (py - cur.y) / cur.k;
       return { k: k2, x: px - wx * k2, y: py - wy * k2 };
     });
-  }, [leaveCameraScreen]);
+  }, []);
 
   const panBy = useCallback((dx: number, dy: number) => {
+    if (useScreenState.getState().presenting) return;
     leaveCameraScreen();
     setFitMode(false);
     setView((v) => v ? { ...v, x: v.x + dx, y: v.y + dy } : v);
@@ -531,7 +539,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     try { viewport.current?.setPointerCapture(event.pointerId); } catch { /* synthetic events in tests */ }
   };
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag.current || drag.current.id !== event.pointerId) return;
+    if (useScreenState.getState().presenting || !drag.current || drag.current.id !== event.pointerId) return;
     drag.current.moved = true;
     panBy(event.movementX, event.movementY);
   };
@@ -589,7 +597,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     if (!dragged) return;
     const move = (event: PointerEvent) => {
       const d = frameDrag.current;
-      if (!d || d.id !== event.pointerId) return;
+      if (useScreenState.getState().presenting || !d || d.id !== event.pointerId) return;
       const dx = event.clientX - d.startX;
       const dy = event.clientY - d.startY;
       if (!d.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;

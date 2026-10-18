@@ -18,9 +18,6 @@
  * a shared link reproduces a *view* of the receiving build's committed tokens,
  * it does not write to the codebase. On the static build there is no server
  * either way; in dev this keeps opening a link from rewriting `tokens.json`.
- *
- * A browser without the compression streams gets a banner, no URL tracking,
- * and a disabled Copy link button.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -57,15 +54,10 @@ function currentShareState(): ShareState {
   };
 }
 
-/** Path and query of the current page: the part of the URL a link keeps. */
 function pageBase(): string {
   return window.location.pathname + window.location.search;
 }
 
-/**
- * Encode the current view and write it into the address bar. Returns the full
- * URL, or null when a non-default view cannot be encoded.
- */
 async function publishCurrentView(): Promise<string | null> {
   const state = currentShareState();
   const payload = await encodeShareState(state);
@@ -136,7 +128,6 @@ export function useShareLink({
         useEditorStore.getState().applySharedOverrides(state.overrides);
       }
       useEditorStore.getState().setScheme(state.scheme);
-      // `interpretShareJson` already gives a present link a screen.
       if (state.screen) {
         useScreenState.getState().setPresentedKey(state.screen);
         if (state.present) useScreenState.getState().setPresenting(true);

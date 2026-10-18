@@ -52,11 +52,12 @@ try {
   const url = `http://127.0.0.1:${address.port}${basePath}/ide`;
   browser = await chromium.launch();
 
-  const openPage = async (hash, initScript) => {
+  const openPage = async (hash, initScript, controlledTime = false) => {
     const context = await browser.newContext({ viewport: { width: 1600, height: 1100 }, reducedMotion: 'reduce' });
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     if (initScript) await context.addInitScript(initScript);
     const page = await context.newPage();
+    if (controlledTime) await page.clock.install();
     page.setDefaultTimeout(15000);
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -66,8 +67,6 @@ try {
     return { context, page, errors, board };
   };
 
-  // The screen frame nearest the viewport center once the camera settles.
-  // Measured in the browser so the check does not copy the board geometry.
   const cameraScreen = async (page) => {
     await page.waitForFunction(() => document.querySelector('.mp-world')?.dataset.flying === 'false');
     return page.evaluate(() => {
@@ -90,8 +89,6 @@ try {
     });
   };
 
-  // A link applies after the board is ready, so its flight may start later
-  // than the first settled frame. Poll until the camera shows `key`.
   const expectCamera = async (page, key) => {
     const deadline = Date.now() + 5000;
     let seen = null;
@@ -149,42 +146,68 @@ try {
     await context.close();
   }
 
-  // -- Copy link right after a token edit, then a copied-link round trip ---
   {
-    const { context, page, errors, board } = await openPage('');
+    const { context, page, errors, board } = await openPage('', undefined, true);
     assert.equal(await page.evaluate(() => window.location.hash), '');
     await flyTo(board, 'Stats');
     await expectCamera(page, 'stats');
-    // The first range input in the tokens tab is a space token. Edit it and
-    // click Copy link at once, well inside the 400ms debounce window.
-    const slider = page.locator('input[type="range"]').first();
-    await slider.fill('20');
+    assert.equal((await hashPayload(page))?.s, 'stats');
+    await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 1000));
+    const beforeEdit = await page.evaluate(() => ({ now: Date.now(), hash: location.hash }));
+    await page.locator('input[type="color"]').first().fill('#00ff88');
+    assert.equal(await page.evaluate(() => location.hash), beforeEdit.hash, 'The URL changed before the debounce timer ran.');
     await board.getByRole('button', { name: 'Copy link' }).click();
     await board.getByRole('button', { name: 'Copied' }).waitFor();
+    assert.equal(await page.evaluate(() => Date.now()), beforeEdit.now, 'The browser clock advanced during Copy link.');
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     const match = copied.match(/#s=([A-Za-z0-9_-]+)/);
-    assert.ok(match, `clipboard holds no payload: ${copied}`);
+    assert.ok(match, 'The copied link has no payload.');
     const json = decode(match[1]);
-    assert.equal(json.s, 'stats', 'Copy link must encode the focused screen');
-    assert.equal(json.p, undefined, 'not presenting, so no present flag');
-    const edited = Object.entries(json.o ?? {});
-    assert.equal(edited.length, 1, `Copy link must carry the edit made before the click: ${JSON.stringify(json)}`);
-    assert.match(edited[0][0], /^space\./);
-    assert.equal(edited[0][1], 20);
+    assert.equal(json.s, 'stats', 'The copied link must include the focused screen.');
+    assert.equal(json.p, undefined, 'The board is not presenting.');
+    assert.deepEqual(json.o, { 'color.light.bg': '#00ff88' }, 'Copy link must include the current token value.');
     assert.deepEqual(Object.keys(json).sort(), ['o', 's', 'v']);
+    await page.clock.runFor(SYNC_DEBOUNCE_MS);
+    assert.equal(await page.evaluate(() => location.href), copied, 'A pending write changed the copied URL.');
     assert.deepEqual(errors, []);
     await context.close();
 
-    // Open the copied link in a fresh browser context.
-    const fresh = await openPage(copied.slice(copied.indexOf('#')));
+    const fresh = await openPage(new URL(copied).hash);
     await expectCamera(fresh.page, 'stats');
+    await fresh.page.waitForFunction(() => {
+      const el = document.querySelector('#screen-stats');
+      if (!el) return false;
+      const walk = (node) =>
+        getComputedStyle(node).backgroundColor === 'rgb(0, 255, 136)' ||
+        [...node.children].some(walk);
+      return walk(el);
+    });
     assert.equal(await fresh.page.locator('.mp-sharebanner').count(), 0);
-    assert.deepEqual(await hashPayload(fresh.page), json, 'the copied link must reproduce the same state');
+    assert.deepEqual(await hashPayload(fresh.page), json, 'The copied link must restore the same state.');
     assert.deepEqual(fresh.errors, []);
     await fresh.context.close();
   }
 
-  // -- The screen key leaves the link when the camera leaves the screen -----
+  {
+    const { context, page, errors, board } = await openPage('');
+    await flyTo(board, 'Stats');
+    await expectCamera(page, 'stats');
+    await board.getByRole('button', { name: 'Zoom to 100%', exact: true }).click();
+    await expectCamera(page, 'stats');
+    assert.equal((await hashPayload(page))?.s, 'stats', 'Zoom must preserve the focused screen.');
+    await board.getByRole('button', { name: 'Copy link', exact: true }).click();
+    await board.getByRole('button', { name: 'Copied', exact: true }).waitFor();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    const payload = new URL(copied).hash.slice('#s='.length);
+    assert.equal(decode(payload).s, 'stats', 'The copied link must include the screen after zoom.');
+    assert.deepEqual(errors, []);
+    await context.close();
+    const fresh = await openPage(new URL(copied).hash);
+    await expectCamera(fresh.page, 'stats');
+    assert.deepEqual(fresh.errors, []);
+    await fresh.context.close();
+  }
+
   {
     const { context, page, errors, board } = await openPage('');
     await flyTo(board, 'Habit detail');
@@ -196,7 +219,6 @@ try {
     await context.close();
   }
 
-  // -- Partial payload: unknown screen, unknown token, invalid value --------
   {
     const link = encode({
       v: 1,
@@ -209,9 +231,7 @@ try {
     const text = await banner.innerText();
     assert.match(text, /points to a screen that does not exist\. The studio shows the first screen/);
     assert.match(text, /cannot apply 2 of 3 token overrides/);
-    // The camera shows the first declared screen.
     await expectCamera(page, KNOWN_SCREENS[0]);
-    // The normalized URL shows what applied: first screen, valid override only.
     const round = await hashPayload(page);
     assert.ok(round);
     assert.equal(round.s, KNOWN_SCREENS[0]);
@@ -222,7 +242,6 @@ try {
     await context.close();
   }
 
-  // -- Malformed payloads, a wrong version, and an unsupported browser ------
   const expectBanner = async (hash, pattern, initScript) => {
     const { context, page, errors, board } = await openPage(hash, initScript);
     const banner = page.locator('.mp-sharebanner');
@@ -232,9 +251,7 @@ try {
     assert.deepEqual(errors, []);
     return { context, board };
   };
-  // Characters outside base64url.
   await (await expectBanner('#s=@@@not-a-payload@@@', /cannot read this link/)).context.close();
-  // Valid base64url, but the bytes are not a deflate stream.
   const notDeflate = Buffer.from('these bytes are not deflate data').toString('base64url');
   await (await expectBanner(`#s=${notDeflate}`, /cannot read this link/)).context.close();
   await (await expectBanner(`#s=${encode({ v: 99, p: 1, s: 'habit' })}`, /different studio version/)).context.close();

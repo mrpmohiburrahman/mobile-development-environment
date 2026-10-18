@@ -45,11 +45,6 @@ type State = {
    */
   undoNote: string | null;
   setToken: (path: string, value: TokenValue) => void;
-  /**
-   * Show a shared link's overrides. The caller validated them. Nothing goes to
-   * the token server: a link shows a view of committed tokens, it does not edit
-   * the codebase.
-   */
   applySharedOverrides: (overrides: Record<string, TokenValue>) => void;
   setScheme: (scheme: Scheme) => void;
   revert: () => void;

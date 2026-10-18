@@ -115,7 +115,6 @@ test('an oversized payload is rejected safely', async () => {
 });
 
 test('a decompression bomb is cut off at the JSON limit', async () => {
-  // 200KB of JSON that compresses to a few hundred bytes.
   const huge = JSON.stringify({ v: 1, p: 1, pad: 'x'.repeat(200_000) });
   const outcome = await decode(base64urlEncode(deflateSync(Buffer.from(huge))));
   assert.deepEqual(outcome.warnings, [SHARE_WARNINGS.malformed]);
