@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { CHROME } from './chrome';
 import { Label } from './Label';
 import { analyticsNote } from './analyticsNote';
@@ -10,13 +10,6 @@ function mixpanelConfigured(): boolean {
 }
 
 function ProjectLink({ href }: { href: string }) {
-  if (Platform.OS !== 'web') {
-    return (
-      <Label role="label" color="#D9481E">
-        {href}
-      </Label>
-    );
-  }
   return createElement(
     'a',
     {
