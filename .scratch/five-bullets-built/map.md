@@ -83,12 +83,13 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 - [Present mode and the shareable URL](issues/06-present-mode-and-url.md) — Present mode shows one screen frame large (the one the camera is on), hides all studio chrome, keeps the app live and the spine recording, and is read-only with arrow-key stepping and a light/dark toggle; shareable state lives in the hash fragment (`#s=…`) as present flag + screen key + scheme + deflated token overrides, updates live via `replaceState` with a Copy link button, and a banner reports any part of a link the build cannot apply.
 - [What the app tells Mixpanel](issues/07-mixpanel-event-design.md) — raw `/track` from the native build only, four events (`App Opened`, `Screen Viewed`, `Habit Toggled`, `Signed Out`), one UUID per install as identity, and a studio Analytics tab that is a static note with a link to the project rather than a send log. Web sends nothing. See ADR 0003.
 - [Analytics tab](issues/19-analytics-tab.md) — the studio tab states the native-only boundary, links to project 4074212, and says `Mixpanel: not configured` when the web build has no token. It never shows the token, a send log, or a dashboard. A separate Playwright check proves both exports send nothing.
+- [Board in the normal studio](issues/13-board-in-the-normal-studio.md) — commit `e300342` ships the Contour board at `/ide` and in the static export with no development gate. Unit tests, typecheck, lint, and guard passed. `npm run test:board` exists and covers the criteria. It was not run in the closing session because the host was low on memory. Run it before 17 or 18 starts. Review found two follow-up candidates: a Back with no destination clears the active accent, and `history[from]` survives a Back.
 - [What the guard now guards](issues/09-the-new-guard.md) — two guarded edits (`_layout.tsx` calls `useAnalytics()`, `habit.tsx` fixes the UTC weekday) pass through a per-commit `Guard-Allow: <path> -- <reason>` trailer; `ui/index.tsx` stays a permanent exception and now also carries the font family. See ADR 0004.
 - [The visual-regression contract](issues/08-visual-regression-contract.md) — capture the app surface at DPR 2, derive the matrix from the screen registry plus empty Habit detail, enter Capture mode by a static-export query, update Linux baselines only through reviewed `vr:update`, use threshold 0, and show a bundled screenshot record in the Regression tab. A missing record is not a pass. See ADR 0002.
 
 ## Not yet specified
 
-- **Edge routing.** Ticket 05 resolves this with side-midpoint connections and detour lanes above the frames. Normal studio and static-export integration remain required.
+- **Edge routing.** Ticket 05 resolves this with side-midpoint connections and detour lanes above the frames. Ticket 13 ships it at the normal studio entry and in the static export.
 - **Back edges.** Ticket 05 resolves Back through board-local history. Empty history reports no destination.
 - **Mixpanel event taxonomy beyond the spine.** Resolved in ticket 07: four
   events from the native app only. The spine stays a studio log and does not
@@ -128,12 +129,12 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 | 10 | [Collapse into the spec and tickets](issues/10-collapse-to-spec.md) | task | 05, 06, 07, 08, 09 (resolved) |
 | 11 | [Board edges implementation](issues/11-board-edges-implementation.md) | task | 05 (resolved) |
 | 12 | [Guard permission trailers](issues/12-guard-permission-trailers.md) | task | — (resolved) |
-| 13 | [Board in the normal studio](issues/13-board-in-the-normal-studio.md) | task | — |
+| 13 | [Board in the normal studio](issues/13-board-in-the-normal-studio.md) | task | — (resolved) |
 | 14 | [Bundled font](issues/14-bundled-font.md) | task | — |
 | 15 | [Analytics sender](issues/15-analytics-sender.md) | task | — (resolved) |
 | 16 | [Weekday fix and layout hook](issues/16-weekday-fix-and-layout-hook.md) | task | 12, 15 (resolved) |
-| 17 | [Capture mode](issues/17-capture-mode.md) | task | 13, 14 |
-| 18 | [Present mode](issues/18-present-mode.md) | task | 13 |
+| 17 | [Capture mode](issues/17-capture-mode.md) | task | 13 (resolved), 14 |
+| 18 | [Present mode](issues/18-present-mode.md) | task | 13 (resolved) |
 | 19 | [Analytics tab](issues/19-analytics-tab.md) | task | 15 (resolved) |
 | 20 | [Screenshot suite and CI](issues/20-screenshot-suite-and-ci.md) | task | 16, 17 |
 | 21 | [Regression tab](issues/21-regression-tab.md) | task | 20 |
@@ -144,4 +145,4 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: 13 and 14.** 12, 15, 16, and 19 are resolved. 17 waits on 13 and 14. 18 waits on 13. 20 waits on 17. 21 waits on 20. 22 waits on 18. 23 waits on 20, 21, and 22.
+**Frontier: 14 and 18.** 12, 13, 15, 16, and 19 are resolved. 17 waits on 14. 20 waits on 17. 21 waits on 20. 22 waits on 18. 23 waits on 20, 21, and 22.
