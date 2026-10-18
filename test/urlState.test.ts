@@ -21,6 +21,8 @@ import {
   interpretShareJson,
   isDefaultShareState,
   MAX_PAYLOAD_CHARS,
+  compressionSupported,
+  shareHref,
   shareJsonOf,
   sharePayloadFromHash,
   overridesWarning,
@@ -67,6 +69,16 @@ test('the wire document holds exactly v, p, s, c, o — no board or app state', 
   assert.ok(!isDefaultShareState({ ...defaultShareState(), scheme: 'dark' }));
 });
 
+test('a default view encodes to no payload, so the URL carries no fragment', async () => {
+  assert.equal(await encodeShareState(defaultShareState()), null);
+  assert.equal(shareHref('/ide', null), '/ide');
+  assert.equal(shareHref('/ide?x=1', 'abc'), '/ide?x=1#s=abc');
+});
+
+test('the override warning counts rejected overrides, not applied ones', () => {
+  assert.match(overridesWarning(3, 4), /cannot apply 3 of 4 token overrides/);
+});
+
 test('base64url round-trips and uses no hash-hostile characters', () => {
   const bytes = new Uint8Array([0, 1, 250, 251, 252, 253, 254, 255, 63]);
   const encoded = base64urlEncode(bytes);
@@ -103,7 +115,8 @@ test('an oversized payload is rejected safely', async () => {
 });
 
 test('a decompression bomb is cut off at the JSON limit', async () => {
-  const huge = `{${'"v":1,"p":1,'}${'"pad":"'.padEnd(1)}${'x'.repeat(200_000)}"}`;
+  // 200KB of JSON that compresses to a few hundred bytes.
+  const huge = JSON.stringify({ v: 1, p: 1, pad: 'x'.repeat(200_000) });
   const outcome = await decode(base64urlEncode(deflateSync(Buffer.from(huge))));
   assert.deepEqual(outcome.warnings, [SHARE_WARNINGS.malformed]);
   assert.deepEqual(outcome.state, defaultShareState());
@@ -146,14 +159,14 @@ test('unknown token paths and invalid values drop out; valid ones apply', async 
       },
     }),
   );
-  assert.deepEqual(outcome.warnings, [overridesWarning(1, 4)]);
+  assert.deepEqual(outcome.warnings, [overridesWarning(3, 4)]);
   assert.deepEqual(outcome.state.overrides, { 'color.light.accent': '#123456' });
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });
 
 test('a value that fails token rules is rejected with the same warning', async () => {
   const outcome = await decode(linkFor({ v: 1, o: { 'color.light.accent': 'red' } }));
-  assert.deepEqual(outcome.warnings, [overridesWarning(0, 1)]);
+  assert.deepEqual(outcome.warnings, [overridesWarning(1, 1)]);
   assert.deepEqual(outcome.state.overrides, {});
 });
 
@@ -195,10 +208,11 @@ test('a browser without compression APIs gets an explicit warning', async () => 
     delete globalThis.CompressionStream;
     // @ts-expect-error simulating an unsupported browser
     delete globalThis.DecompressionStream;
+    assert.equal(compressionSupported(), false);
     const outcome = await decode(linkFor({ v: 1 }));
     assert.equal(outcome.unsupported, true);
     assert.deepEqual(outcome.warnings, [SHARE_WARNINGS.unsupported]);
-    assert.equal(await encodeShareState(defaultShareState()), null);
+    assert.equal(await encodeShareState({ ...defaultShareState(), scheme: 'dark' }), null);
   } finally {
     globalThis.CompressionStream = realCS;
     globalThis.DecompressionStream = realDS;

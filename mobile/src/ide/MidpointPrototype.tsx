@@ -228,10 +228,17 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     setView({ k: k2, x: el.clientWidth / 2 - (bounds.minX + bw / 2) * k2, y: el.clientHeight / 2 - (bounds.minY + bh / 2) * k2 });
   }, [bounds]);
 
+  // The camera screen is the one a flight targeted. Any other camera move
+  // leaves it, so the screen key in a shared link never names a screen the
+  // viewer has left. Present entry then picks the nearest frame.
+  const leaveCameraScreen = useCallback(() => {
+    if (useScreenState.getState().presentedKey !== null) setPresentedKey(null);
+  }, [setPresentedKey]);
+
   const flyTo = useCallback((key: string | null, targetK?: number) => {
     const el = viewport.current;
     if (!el) return;
-    if (key !== null) setPresentedKey(key);
+    setPresentedKey(key);
     if (flyTimer.current) clearTimeout(flyTimer.current);
     if (key === null) {
       setFitMode(true);
@@ -328,6 +335,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const px = cx - rect.left, py = cy - rect.top;
+    leaveCameraScreen();
     setFitMode(false);
     setView((v) => {
       const cur = v ?? { x: 0, y: 0, k: 0.4 };
@@ -335,12 +343,13 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       const wx = (px - cur.x) / cur.k, wy = (py - cur.y) / cur.k;
       return { k: k2, x: px - wx * k2, y: py - wy * k2 };
     });
-  }, []);
+  }, [leaveCameraScreen]);
 
   const panBy = useCallback((dx: number, dy: number) => {
+    leaveCameraScreen();
     setFitMode(false);
     setView((v) => v ? { ...v, x: v.x + dx, y: v.y + dy } : v);
-  }, []);
+  }, [leaveCameraScreen]);
 
   useLayoutEffect(() => {
     const el = viewport.current;
@@ -392,7 +401,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       }
       if (event.key === '+' || event.key === '=') zoomAt(vpSize.w / 2 + (viewport.current?.getBoundingClientRect().left ?? 0), vpSize.h / 2 + (viewport.current?.getBoundingClientRect().top ?? 0), 1.2);
       if (event.key === '-') zoomAt(vpSize.w / 2 + (viewport.current?.getBoundingClientRect().left ?? 0), vpSize.h / 2 + (viewport.current?.getBoundingClientRect().top ?? 0), 1 / 1.2);
-      if (event.key === '0') { setFitMode(true); fitView(); }
+      if (event.key === '0') { leaveCameraScreen(); setFitMode(true); fitView(); }
     };
     const up = (event: KeyboardEvent) => {
       if (event.key === ' ') { spaceHeld.current = false; setSpace(false); }
@@ -400,7 +409,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, [zoomAt, fitView, vpSize, presenting]);
+  }, [zoomAt, fitView, vpSize, presenting, leaveCameraScreen]);
 
   useEffect(() => {
     if (presenting) return;
@@ -636,7 +645,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
         <span className="mp-header-divider" />
         <div className="mp-heading"><h1>Navigation board</h1><span>Real app screens · drag frames · pan and zoom</span></div>
         {badge}
-        <div className="mp-header-actions"><button type="button" onClick={() => void share.copyLink()} title="Copy a link that reproduces this view">{share.copyState === 'copied' ? 'Copied' : share.copyState === 'failed' ? 'Copy failed' : 'Copy link'}</button><button type="button" aria-label={`Present ${presentedLabel ?? 'board'}`} aria-pressed={presenting} onClick={() => (presenting ? setPresenting(false) : enterPresent())} title="Present the camera screen (P)">Present</button><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
+        <div className="mp-header-actions"><button type="button" onClick={() => void share.copyLink()} disabled={!share.supported} title={share.supported ? 'Copy a link that reproduces this view' : 'This browser does not support shared links'}>{share.copyState === 'copied' ? 'Copied' : share.copyState === 'failed' ? 'Copy failed' : 'Copy link'}</button><button type="button" aria-label={`Present ${presentedLabel ?? 'board'}`} aria-pressed={presenting} onClick={() => (presenting ? setPresenting(false) : enterPresent())} title="Present the camera screen (P)">Present</button><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
       </header>
 
       <section className="mp-toolbar" aria-label="Board controls">

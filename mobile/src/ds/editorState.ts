@@ -45,6 +45,12 @@ type State = {
    */
   undoNote: string | null;
   setToken: (path: string, value: TokenValue) => void;
+  /**
+   * Show a shared link's overrides. The caller validated them. Nothing goes to
+   * the token server: a link shows a view of committed tokens, it does not edit
+   * the codebase.
+   */
+  applySharedOverrides: (overrides: Record<string, TokenValue>) => void;
   setScheme: (scheme: Scheme) => void;
   revert: () => void;
   revertToken: (path: string) => void;
@@ -74,6 +80,9 @@ export const useEditorStore = create<State>((set, get) => ({
   },
 
   setScheme: (scheme) => set({ scheme }),
+
+  applySharedOverrides: (overrides) =>
+    set({ overrides: { ...overrides }, rejection: null, undoNote: null }),
 
   revert: () => {
     set({ overrides: {}, rejection: null, undoNote: null });

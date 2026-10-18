@@ -23,13 +23,12 @@
  */
 
 import { validateTokenValue, type TokenValue } from '../ds/tokenValidation.ts';
-
-export type ShareScheme = 'light' | 'dark';
+import type { Scheme } from '../ds/editorState.ts';
 
 export type ShareState = {
   present: boolean;
   screen: string | null;
-  scheme: ShareScheme;
+  scheme: Scheme;
   overrides: Record<string, TokenValue>;
 };
 
@@ -44,20 +43,29 @@ export const SHARE_PARAM = 's';
 export const MAX_PAYLOAD_CHARS = 16_384;
 export const MAX_JSON_CHARS = 65_536;
 
+// Banner text is a user-facing string, so it follows ASD-STE100: active
+// voice, simple present tense, one statement per sentence.
 export const SHARE_WARNINGS = {
   unsupported:
-    'This browser cannot read or write shared links. The studio works, but the URL will not track edits and Copy link is unavailable.',
-  tooLarge: 'This link is too large to read safely. Showing the studio defaults.',
-  malformed: "This link's state could not be read. Showing the studio defaults.",
-  version: 'This link comes from a different version of the studio. Showing the studio defaults.',
-  unknownScreen: 'This link pointed to a screen that no longer exists. Showing the first screen.',
-  overridesUnreadable: "This link's token overrides could not be read. Showing committed values.",
-  scheme: "This link's colour scheme value was not recognized. Showing the light scheme.",
-  present: "This link's present flag was not recognized. Opening the board instead.",
+    'This browser does not support shared links. The URL does not show your edits. Copy link is not available.',
+  tooLarge: 'This link is too large. The studio shows its default view.',
+  malformed: 'The studio cannot read this link. The studio shows its default view.',
+  version: 'This link is from a different studio version. The studio shows its default view.',
+  unknownScreen: 'This link points to a screen that does not exist. The studio shows the first screen.',
+  overridesUnreadable: 'The studio cannot read the token overrides in this link. The studio shows the committed values.',
+  scheme: 'The studio does not know the colour scheme in this link. The studio shows the light scheme.',
+  present: 'The studio does not know the present flag in this link. The studio shows the board.',
 } as const;
 
-export function overridesWarning(applied: number, total: number): string {
-  return `This link's token overrides could not be fully applied (${applied} of ${total}). Showing committed values for the rest.`;
+/** The banner sentence for overrides this build refused, counted as rejected. */
+export function overridesWarning(rejected: number, total: number): string {
+  return `The studio cannot apply ${rejected} of ${total} token overrides in this link. It shows the committed values for those tokens.`;
+}
+
+/** True when this browser has both compression streams that the format needs. */
+export function compressionSupported(): boolean {
+  const scope = globalThis as { CompressionStream?: unknown; DecompressionStream?: unknown };
+  return typeof scope.CompressionStream === 'function' && typeof scope.DecompressionStream === 'function';
 }
 
 export type ShareOutcome = {
@@ -171,7 +179,9 @@ export function interpretShareJson(
           applied++;
         }
       }
-      if (applied < entries.length) warnings.push(overridesWarning(applied, entries.length));
+      if (applied < entries.length) {
+        warnings.push(overridesWarning(entries.length - applied, entries.length));
+      }
     }
   }
 
@@ -208,22 +218,25 @@ export function sharePayloadFromHash(hash: string): string | null {
   return new URLSearchParams(raw).get(SHARE_PARAM);
 }
 
-// The DOM and Node stream typings disagree about `pipeThrough`; the runtime
-// contract (a CompressionStream/DecompressionStream transform) is what matters.
-type Transform = new (format: string) => {
+// The DOM and Node stream typings disagree about `pipeThrough`. The runtime
+// contract is a CompressionStream or DecompressionStream constructor.
+type DeflateCodec = new (format: 'deflate') => {
   readable: ReadableStream<Uint8Array>;
   writable: WritableStream<Uint8Array>;
 };
 
-async function pipeThrough(bytes: Uint8Array, Transform_: Transform): Promise<ReadableStream<Uint8Array>> {
-  return new Blob([bytes as BlobPart]).stream().pipeThrough(new Transform_('deflate'));
+function codecOf(name: 'CompressionStream' | 'DecompressionStream'): DeflateCodec {
+  return (globalThis as unknown as Record<string, DeflateCodec>)[name];
+}
+
+/** `bytes` piped through one deflate codec, as a readable stream. */
+function deflateStream(bytes: Uint8Array, Codec: DeflateCodec): ReadableStream<Uint8Array> {
+  return new Blob([bytes as BlobPart]).stream().pipeThrough(new Codec('deflate'));
 }
 
 async function deflate(bytes: Uint8Array): Promise<Uint8Array | null> {
-  const CS = (globalThis as { CompressionStream?: unknown }).CompressionStream;
-  if (typeof CS !== 'function') return null;
   try {
-    const stream = await pipeThrough(bytes, CS as unknown as Transform);
+    const stream = deflateStream(bytes, codecOf('CompressionStream'));
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
     return null;
@@ -235,11 +248,8 @@ async function deflate(bytes: Uint8Array): Promise<Uint8Array | null> {
  * past `limit`, so a zip bomb costs one pass over `limit` bytes, not memory.
  */
 async function inflate(bytes: Uint8Array, limit: number): Promise<Uint8Array | null> {
-  const DS = (globalThis as { DecompressionStream?: unknown }).DecompressionStream;
-  if (typeof DS !== 'function') return null;
   try {
-    const stream = await pipeThrough(bytes, DS as unknown as Transform);
-    const reader = stream.getReader();
+    const reader = deflateStream(bytes, codecOf('DecompressionStream')).getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
     for (;;) {
@@ -264,14 +274,20 @@ async function inflate(bytes: Uint8Array, limit: number): Promise<Uint8Array | n
   }
 }
 
-/** `state` → `#s=` value, or null when this browser cannot compress. */
+/**
+ * `state` → `#s=` value. A default view encodes to null, because the URL then
+ * carries no fragment. Also null when this browser cannot compress.
+ */
 export async function encodeShareState(state: ShareState): Promise<string | null> {
-  if (typeof (globalThis as { CompressionStream?: unknown }).CompressionStream !== 'function') {
-    return null;
-  }
+  if (isDefaultShareState(state) || !compressionSupported()) return null;
   const bytes = new TextEncoder().encode(JSON.stringify(shareJsonOf(state)));
   const compressed = await deflate(bytes);
   return compressed ? base64urlEncode(compressed) : null;
+}
+
+/** The URL for `payload` on top of `base` (path and query), or `base` alone. */
+export function shareHref(base: string, payload: string | null): string {
+  return payload ? `${base}#${SHARE_PARAM}=${payload}` : base;
 }
 
 /**
@@ -289,10 +305,10 @@ export async function decodeSharePayload(
     warnings: [],
     unsupported: false,
   });
-  if (typeof (globalThis as { DecompressionStream?: unknown }).DecompressionStream !== 'function') {
+  if (!compressionSupported()) {
     return { ...fallback(), warnings: [SHARE_WARNINGS.unsupported], unsupported: true };
   }
-  if (typeof payload !== 'string' || payload.length > MAX_PAYLOAD_CHARS) {
+  if (payload.length > MAX_PAYLOAD_CHARS) {
     return { ...fallback(), warnings: [SHARE_WARNINGS.tooLarge] };
   }
   const bytes = base64urlDecode(payload);

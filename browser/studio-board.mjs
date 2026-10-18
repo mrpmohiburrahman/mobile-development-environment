@@ -141,8 +141,8 @@ try {
   await page.locator('#screen-habit').getByText('Back', { exact: true }).click();
   assert.match(await status.innerText(), /no back destination/);
   // The path must not move: a Back with no destination fires no navigation.
-  // The hash is shareable view state (ticket 22) and tracks the camera, so it
-  // legitimately differs from the initial URL here.
+  // The hash is shareable view state (ticket 22). It names the screen the
+  // camera flew to, so it legitimately differs from the initial URL here.
   assert.equal(page.url().split('#')[0], url);
 
   await resetLayout.click();
