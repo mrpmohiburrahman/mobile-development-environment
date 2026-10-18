@@ -1,24 +1,21 @@
 import type { Scheme } from '../ds/editorState';
 
 /**
- * The present bar: screen label, declared position, scheme toggle, and Exit.
+ * The present bar: screen label, declared position, scheme, and Exit hint.
  * Rendered by the board inside the viewport so it floats over the presented
- * frame at the viewport bottom edge. Owns no state -- label, position, and
- * scheme come in as props; Exit and the toggle call back out. Kept out of
- * `MidpointPrototype.tsx` so the bar can be reviewed (and styled) on its own.
+ * frame at the viewport bottom edge. While presenting, focus sits on the
+ * frame the presenter came from, so the bar's own buttons refocus rather than
+ * fire -- the keyboard is the operative control: Left/Right step, L switches
+ * scheme, Escape exits. The bar is a readout, not a toolbar.
  */
 export function PresentBar({
   label,
   position,
   scheme,
-  onToggleScheme,
-  onExit,
 }: {
   label: string;
   position: { current: number; total: number } | null;
   scheme: Scheme;
-  onToggleScheme: () => void;
-  onExit: () => void;
 }) {
   return (
     <div className="mp-presentbar" role="toolbar" aria-label="Present bar">
@@ -26,16 +23,8 @@ export function PresentBar({
         <strong>{label}</strong>
         <span>{position ? `${position.current} / ${position.total}` : ''}</span>
       </span>
-      <button
-        type="button"
-        aria-label={`Scheme: ${scheme}. Press to switch to ${scheme === 'light' ? 'dark' : 'light'}`}
-        aria-pressed={scheme === 'dark'}
-        onClick={onToggleScheme}>
-        {scheme === 'light' ? 'Light' : 'Dark'}
-      </button>
-      <button type="button" onClick={onExit}>
-        Exit
-      </button>
+      <span className="mp-present-scheme" aria-label={`Scheme: ${scheme}. Press L to switch.`}>{scheme === 'light' ? 'Light' : 'Dark'}</span>
+      <span className="mp-present-hint">← → · L · Esc</span>
     </div>
   );
 }

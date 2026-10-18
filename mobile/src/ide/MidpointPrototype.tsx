@@ -115,9 +115,10 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   const spine = useSpine();
   const presentedKey = useScreenState((s) => s.presentedKey);
   const setPresentedKey = useScreenState((s) => s.setPresentedKey);
+  const presenting = useScreenState((s) => s.presenting);
   const scheme = useEditorStore((s) => s.scheme);
   const setScheme = useEditorStore((s) => s.setScheme);
-  const [presenting, setPresenting] = useState(false);
+  const setPresenting = useCallback((value: boolean) => useScreenState.getState().setPresenting(value), []);
   const [includeTabs, setIncludeTabs] = useState(false);
   const [sessionStart, setSessionStart] = useState(spine.seq);
   const [active, setActive] = useState<Activity | null>(null);
@@ -263,6 +264,12 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       const control = Boolean(target?.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]'));
       if (editable) return;
       if (!control) event.preventDefault();
+      if (event.key === 'l' || event.key === 'L') {
+        const cur = useEditorStore.getState().scheme;
+        setScheme(cur === 'light' ? 'dark' : 'light');
+        event.preventDefault();
+        return;
+      }
       const decision = presentKeyboardDecision({ key: event.key, targetEditable: editable, targetControl: control, presenting });
       if (!decision) return;
       if (decision.action === 'exit') setPresenting(false);
@@ -282,24 +289,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     };
     window.addEventListener('keydown', decide);
     return () => window.removeEventListener('keydown', decide);
-  }, [presenting, setPresentedKey, setScheme]);
-
-  // L also works when focus sits on the presented phone's own controls: those
-  // are app controls, not editing fields, and the bar's scheme toggle is the
-  // only other control a presenter needs mid-demonstration.
-  useEffect(() => {
-    if (!presenting) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'l' && event.key !== 'L') return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      const cur = useEditorStore.getState().scheme;
-      setScheme(cur === 'light' ? 'dark' : 'light');
-      event.preventDefault();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [presenting, setScheme]);
+  }, [presenting, setPresentedKey, setScheme, setPresenting]);
 
   const enterPresent = () => {
     const key = useScreenState.getState().presentedKey ?? screens[0]?.key;
@@ -718,13 +708,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
             </div>
 
             {presenting && presentKey && presentedLabel && (
-              <PresentBar
-                label={presentedLabel}
-                position={presentedPos}
-                scheme={scheme}
-                onToggleScheme={() => setScheme(scheme === 'light' ? 'dark' : 'light')}
-                onExit={() => setPresenting(false)}
-              />
+              <PresentBar label={presentedLabel} position={presentedPos} scheme={scheme} />
             )}
           </div>
         </div>

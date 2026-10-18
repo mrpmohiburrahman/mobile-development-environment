@@ -8,6 +8,7 @@ import { AnalyticsPanel } from '../ide/AnalyticsPanel';
 import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
 import { Drifted, useScreenDrift } from '../ide/ScreenDriftPanel';
 import { attachSpine } from '../ide/spineStore';
+import { useScreenState } from '../ide/screen.state';
 import { CHROME, chipStyle } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
@@ -41,6 +42,7 @@ export default function IDE() {
   // them and the route panel can count the back controls it finds there. Owned
   // here because that node wraps the blueprint, not the panel.
   const { rootRef, screens, unpaired } = useScreenDrift(comparing);
+  const presenting = useScreenState((s) => s.presenting);
 
   // The change log attaches here rather than at module scope, so "nothing has
   // happened yet" and "nothing is listening" stay two different sentences. Both
@@ -87,6 +89,7 @@ export default function IDE() {
 
   return (
     <View style={{ flex: 1, flexDirection: 'row', backgroundColor: CHROME.bg }}>
+      {!presenting && (
       <View style={{ width: 300, borderRightWidth: 1, borderRightColor: CHROME.border }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 12 }}>
           {TABS.map((name) => (
@@ -106,12 +109,15 @@ export default function IDE() {
         </View>
         <ScrollView contentContainerStyle={{ padding: 12, paddingTop: 0 }}>{content[tab]}</ScrollView>
       </View>
+      )}
 
       <View ref={rootRef} style={{ flex: 1 }}>
         {/* Always rendered, so the toggle sits next to the claim it qualifies. */}
+        {!presenting && (
         <View style={{ paddingHorizontal: 24, paddingTop: 16, alignItems: 'flex-start' }}>
           <BaselineToggle on={comparing} onChange={setComparing} />
         </View>
+        )}
         <Blueprint comparing={comparing} focus={focus} />
       </View>
     </View>

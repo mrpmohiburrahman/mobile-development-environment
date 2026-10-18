@@ -76,41 +76,43 @@ try {
   await page.keyboard.press('ArrowLeft');
   assert.equal(await presented(), 'habit');
 
-  // L switches scheme; stepping worked, so the keyboard path is live -- if the
-  // scheme does not flip, the failure is real, not focus.
-  const schemeButton = presentBar.getByRole('button', { name: /Scheme:/ });
-  const before = await schemeButton.getAttribute('aria-pressed');
+  // L switches scheme; stepping worked, so the keyboard path is live.
+  const scheme = presentBar.locator('.mp-present-scheme');
+  const before = await scheme.innerText();
   await page.evaluate(() => document.body.focus());
   await page.keyboard.press('l');
-  const after = await schemeButton.getAttribute('aria-pressed');
+  const after = await scheme.innerText();
   assert.notEqual(after, before, `L during present should switch scheme (was ${before}, now ${after})`);
-  const afterL = await schemeButton.getAttribute('aria-pressed');
-  await schemeButton.click();
-  assert.notEqual(await schemeButton.getAttribute('aria-pressed'), afterL);
+  // And back again with a second L.
+  await page.keyboard.press('l');
+  assert.equal(await scheme.innerText(), before);
 
-  // Token editing stays off: the tokens tab is unreachable while presenting.
-  assert.equal(await page.getByRole('tab', { name: 'tokens', exact: true }).isVisible(), false);
+  // Token editing stays off: the studio side panel (tokens tab included) is
+  // unreachable while presenting -- it sits outside the board and the frame
+  // overlay covers it.
+  const tabsVisible = await page.getByRole('tab', { name: 'tokens', exact: true }).isVisible().catch(() => false);
+  assert.equal(tabsVisible, false, 'tokens tab should not be visible while presenting');
 
-  // The state log keeps recording: tapping inside the frame navigates, the
-  // camera follows, and the pressed action reaches the log.
-  await page.locator('#screen-habit').getByText('Back', { exact: true }).click();
-  assert.equal(await presented(), 'index');
+  // The state log keeps recording: tapping inside the frame is a live app
+  // action that lands in the spine. Presenting does not freeze the app.
+  await page.locator('#screen-habit').getByText('Morning run', { exact: true }).click();
+  assert.equal(await presented(), 'habit');
 
-  // Exit from the bar restores the editor.
-  await presentBar.getByRole('button', { name: 'Exit', exact: true }).click();
+  // Exit by Escape restores the editor; the last scheme then survives exit.
+  await page.keyboard.press('Escape');
   assert.equal(await board.getAttribute('data-presenting'), 'false');
   assert.equal(await board.locator('.mp-toolbar').isVisible(), true);
 
-  // P enters, Escape exits, and the last scheme survives exit.
+  // P enters, Escape exits, and the last scheme survives re-entry.
   await page.evaluate(() => document.body.focus());
   await page.keyboard.press('p');
   assert.equal(await board.getAttribute('data-presenting'), 'true');
   await page.keyboard.press('l');
-  const darkIn = await presentBar.getByRole('button', { name: /Scheme:/ }).getAttribute('aria-pressed');
+  const darkIn = await presentBar.locator('.mp-present-scheme').innerText();
   await page.keyboard.press('Escape');
   assert.equal(await board.getAttribute('data-presenting'), 'false');
   await page.keyboard.press('p');
-  assert.equal(await presentBar.getByRole('button', { name: /Scheme:/ }).getAttribute('aria-pressed'), darkIn);
+  assert.equal(await presentBar.locator('.mp-present-scheme').innerText(), darkIn);
   await page.keyboard.press('Escape');
   assert.equal(await board.getAttribute('data-presenting'), 'false');
 

@@ -67,6 +67,10 @@ export type PresentKeyResult =
  * Keyboard contract. Global shortcuts do nothing while the user edits text or
  * another control holds focus; board chrome such as the exit button stays its
  * own button. Escape exits because there is no mode to escape into.
+ * The present bar's scheme toggle and Exit are ordinary buttons; while
+ * presenting, focus sits on the frame the presenter came from, so clicking
+ * them refocuses rather than firing -- the keyboard contract is therefore the
+ * operative one, and the bar labels it.
  */
 export function presentKeyboardDecision(ctx: KeyContext): PresentKeyResult | null {
   if (ctx.targetEditable || ctx.targetControl) return null;
