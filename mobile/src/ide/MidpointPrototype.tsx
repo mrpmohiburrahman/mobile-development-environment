@@ -113,6 +113,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   reports?: ReactNode;
 }) {
   const spine = useSpine();
+  const presentedKey = useScreenState((s) => s.presentedKey);
   const setPresentedKey = useScreenState((s) => s.setPresentedKey);
   const scheme = useEditorStore((s) => s.scheme);
   const setScheme = useEditorStore((s) => s.setScheme);
@@ -245,9 +246,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitView, positions, rowY, setPresentedKey]);
 
-  const presentKey = presenting && useScreenState.getState().presentedKey
-    ? (useScreenState.getState().presentedKey as string)
-    : null;
+  const presentKey = presenting ? presentedKey : null;
   const presentedLabel = presentKey ? labelOf(presentKey) : null;
   const presentedPos = presentKey ? declaredPosition(screens.map((s) => s.key), presentKey) : null;
   const presentK = presentScale(vpSize.h);
@@ -262,6 +261,8 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       const target = event.target as HTMLElement | null;
       const editable = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
       const control = Boolean(target?.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]'));
+      if (editable) return;
+      if (!control) event.preventDefault();
       const decision = presentKeyboardDecision({ key: event.key, targetEditable: editable, targetControl: control, presenting });
       if (!decision) return;
       if (decision.action === 'exit') setPresenting(false);
@@ -282,6 +283,23 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     window.addEventListener('keydown', decide);
     return () => window.removeEventListener('keydown', decide);
   }, [presenting, setPresentedKey, setScheme]);
+
+  // L also works when focus sits on the presented phone's own controls: those
+  // are app controls, not editing fields, and the bar's scheme toggle is the
+  // only other control a presenter needs mid-demonstration.
+  useEffect(() => {
+    if (!presenting) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'l' && event.key !== 'L') return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const cur = useEditorStore.getState().scheme;
+      setScheme(cur === 'light' ? 'dark' : 'light');
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [presenting, setScheme]);
 
   const enterPresent = () => {
     const key = useScreenState.getState().presentedKey ?? screens[0]?.key;
