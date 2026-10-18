@@ -28,7 +28,8 @@ It shows one screen frame large and hides everything else.
   its position (`n / 7`), the scheme toggle (also the `L` key), and the
   Exit control.
 - **Which screen is large.** The screen the camera is looking at when the
-  user presses `P` or clicks Present. No jump to screen 01.
+  user presses `P` or clicks Present. In overview, use the screen frame whose
+  center is nearest the viewport center. No jump to screen 01.
 - **Sizing.** The frame fits the viewport height: scale = viewport height
   ÷ 820, clamped to [0.5, 1.5], centered. A projector gets a readable
   screen. A large monitor does not get a giant phone.
