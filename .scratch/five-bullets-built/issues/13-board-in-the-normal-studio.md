@@ -39,7 +39,7 @@ Run on 2026-10-18 in this worktree.
 - `npx tsc --noEmit` in `mobile/`: passed. The worktree lacked `@react-native-async-storage/async-storage`. One `npm install --no-save` of the locked version 2.2.0 fixed the environment. No lockfile changed.
 - `npx expo lint` in `mobile/`: passed.
 - `scripts/guard.sh 51d1585...e300342`: passed. No guarded file changed.
-- `npm run test:board`: **not run in this session.** The host had 0.1 GB free and 2.4 GB of 3 GB swap in use. The owner deferred the export and browser steps. The script exists and covers the criteria above. Run it before ticket 17 or 18 starts.
+- `npm run test:board`: passed. It ran on 2026-10-18 after an export in the following session. The ticket closed one session earlier without it. The host then had 0.1 GB free and 2.4 GB of 3 GB swap in use. The owner deferred the export and browser steps at that time.
 
 ## Code review
 
