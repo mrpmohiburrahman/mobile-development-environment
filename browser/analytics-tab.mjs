@@ -29,7 +29,7 @@ function exportWeb(dir, extraEnv) {
     ...extraEnv,
   };
   return new Promise((done, reject) => {
-    const child = spawn('npx', ['expo', 'export', '--platform', 'web', '--output-dir', dir], {
+    const child = spawn('npx', ['expo', 'export', '--platform', 'web', '--max-workers', '1', '--output-dir', dir], {
       cwd: resolve(ROOT, 'mobile'),
       env,
       stdio: 'inherit',
@@ -65,6 +65,11 @@ function listen(dir) {
 }
 
 async function studioActions(page) {
+  const fly = async (name) => {
+    await page.getByRole('group', { name: 'Fly to screen' }).getByRole('button', { name, exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.mp-world')?.dataset.flying === 'false');
+  };
+  await fly('Today');
   const today = page.locator('#screen-index');
   const habit = today.locator('[tabindex="0"]').filter({
     has: page.getByText('Morning run', { exact: true }),
@@ -77,11 +82,14 @@ async function studioActions(page) {
   await page.locator('#screen-habit').getByText('Morning run', { exact: true }).waitFor();
   await page.getByRole('tab', { name: 'state', exact: true }).click();
   await page.getByText('route index → /habit', { exact: true }).waitFor();
+  await fly('Today');
   await today.getByText('MR', { exact: true }).click();
   await page.getByText('route index → /profile', { exact: true }).waitFor();
+  await fly('Profile');
   await page.locator('#screen-profile').getByText('Sign out', { exact: true }).click();
   await today.getByText('Sign in', { exact: true }).waitFor();
   await page.getByText('route profile → /login', { exact: true }).waitFor();
+  await fly('Today');
   await today.getByText('Sign in', { exact: true }).click();
   await today.getByText('Morning run', { exact: true }).waitFor();
 }

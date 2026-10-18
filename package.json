@@ -3,8 +3,9 @@
   "private": true,
   "description": "A design-token studio that lives inside an Expo app and writes its edits back to the codebase",
   "scripts": {
-    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test": "node --experimental-strip-types --test --test-concurrency=1 test/*.test.ts",
     "test:analytics": "node browser/analytics-tab.mjs",
+    "test:board": "node browser/studio-board.mjs",
     "guard": "bash scripts/guard.sh",
     "tokens": "node token-server/index.mjs",
     "export:web": "bash scripts/export-web.sh",

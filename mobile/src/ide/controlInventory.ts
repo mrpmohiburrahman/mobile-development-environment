@@ -26,17 +26,17 @@ export type ControlReport = {
 const TAB_LABELS = ['Today', 'Habits', 'Stats', 'Profile'];
 const EMPTY_SETTINGS_HANDLERS = ['Dark mode follows system', 'Daily nudge', 'Weekly summary', 'Streak at risk'];
 
-function isDeclaredInert(control: DetectedControl, tabScreens: readonly string[]): boolean {
-  if (tabScreens.includes(control.frame) && TAB_LABELS.includes(control.label) &&
+function isDeclaredInert(control: DetectedControl, tabScreens: readonly string[], navigationEnabled: boolean): boolean {
+  if (!navigationEnabled && tabScreens.includes(control.frame) && TAB_LABELS.includes(control.label) &&
     control.siblings.length === TAB_LABELS.length && TAB_LABELS.every((label) => control.siblings.includes(label))) return true;
-  if (['settings', 'habit'].includes(control.frame) && /^‹\s*Back$/.test(control.label)) return true;
+  if (!navigationEnabled && ['settings', 'habit'].includes(control.frame) && /^‹\s*Back$/.test(control.label)) return true;
   return control.frame === 'settings' && control.label === '' && EMPTY_SETTINGS_HANDLERS.includes(control.context);
 }
 
-export function summarizeControls(snapshot: ControlSnapshot, tabScreens: readonly string[]): ControlReport {
+export function summarizeControls(snapshot: ControlSnapshot, tabScreens: readonly string[], navigationEnabled = false): ControlReport {
   const controls = [...new Map(snapshot.controls.map((control) => [control.id, control])).values()];
   const detected = controls.length;
-  const declaredInert = controls.filter((control) => isDeclaredInert(control, tabScreens)).length;
+  const declaredInert = controls.filter((control) => isDeclaredInert(control, tabScreens, navigationEnabled)).length;
   const unknown = detected - declaredInert;
   const partial = snapshot.framesRead < snapshot.framesExpected;
   const coverage = `${snapshot.framesRead} of ${snapshot.framesExpected} frames read.`;

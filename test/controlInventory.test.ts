@@ -45,6 +45,19 @@ test('the initial inventory labels declared inert controls without recording a p
   assert.match(report.detail, /not observed behavior/);
 });
 
+test('board navigation removes tab and Back controls from the inert declarations', () => {
+  const snapshot = { framesRead: 2, framesExpected: 2, controls: [
+    ...tabControls,
+    control('settings:back', 'settings', '‹Back'),
+    control('settings:empty', 'settings', '', 'Daily nudge'),
+  ] };
+  const live = summarizeControls(snapshot, ['index'], true);
+  assert.equal(live.declaredInert, 1);
+  assert.equal(live.unknown, 5);
+  const comparison = summarizeControls(snapshot, ['index'], false);
+  assert.equal(comparison.declaredInert, 6);
+});
+
 test('duplicate sightings do not turn a control inventory into a press tally', () => {
   const report = summarizeControls({ framesRead: 1, framesExpected: 1, controls: [
     ...tabControls, ...tabControls,

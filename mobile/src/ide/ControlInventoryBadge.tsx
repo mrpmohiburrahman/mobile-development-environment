@@ -13,7 +13,7 @@ const keys = screens.map((screen) => screen.key);
 const tabScreens = tabKeys(routerKeys).map(screenKeyOf);
 const empty = (): ControlSnapshot => ({ controls: [], framesRead: 0, framesExpected: keys.length });
 
-export function ControlInventoryBadge({ host, comparing }: { host: RefObject<View | null>; comparing: boolean }) {
+export function ControlInventoryBadge({ host, comparing, navigationEnabled = false }: { host: RefObject<View | null>; comparing: boolean; navigationEnabled?: boolean }) {
   const { seq } = useSpine();
   const [snapshots, setSnapshots] = useState({ current: empty(), comparison: empty() });
 
@@ -49,7 +49,7 @@ export function ControlInventoryBadge({ host, comparing }: { host: RefObject<Vie
   return (
     <View nativeID="control-inventory" style={{ gap: 4, maxWidth: 700 }}>
       {columns.map((column) => {
-        const report = summarizeControls(snapshots[column], tabScreens);
+        const report = summarizeControls(snapshots[column], tabScreens, navigationEnabled && column === 'current');
         return (
           <View key={column} style={{ gap: 2 }}>
             <Label role="caption" color={TONE[report.tone]} style={{ fontWeight: '600' }}>
@@ -60,7 +60,9 @@ export function ControlInventoryBadge({ host, comparing }: { host: RefObject<Vie
         );
       })}
       <Label role="caption" color={CHROME.textMuted}>
-        Declarations cover tab and back guards, plus Settings controls with empty handlers. Other behavior remains unknown.
+        {navigationEnabled
+          ? 'Current frames use board navigation. HEAD frames retain tab and Back guards. Settings controls with empty handlers remain inert.'
+          : 'Declarations cover tab and back guards, plus Settings controls with empty handlers. Other behavior remains unknown.'}
       </Label>
       <Label role="caption" color={CHROME.textMuted}>
         Detection covers buttons, links, form fields, and tab stops. Custom controls without these signals can be absent from this count.

@@ -243,7 +243,7 @@ export function backGap(count: number | null, missingFrom: string[] = []): Route
     control: 'back',
     count,
     provenance: 'unresolved',
-    reason: 'resolves against history at press time, so the studio cannot draw it as an edge',
+    reason: 'Back uses board-local history when pressed. Empty history has no destination.',
     missingFrom,
   };
 }
@@ -279,7 +279,7 @@ export function describeBackGap(gap: RouteGap): GapCopy {
   return {
     tone: 'degraded',
     measured: true,
-    label: `back controls: ${gap.count} unresolvable`,
+    label: `back controls: ${gap.count} history-dependent`,
     detail: gap.reason,
   };
 }

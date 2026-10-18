@@ -4,6 +4,17 @@ import type { SpineEntry } from './spine.ts';
 
 export type Connection = { from: string; to: string; action: string; kind: 'app' | 'tab' | 'back' };
 export type Point = { x: number; y: number };
+export type BoardHistory = Readonly<Record<string, readonly string[]>>;
+
+export function navigateBoardHistory(history: BoardHistory, from: string, target: string | null): { history: BoardHistory; to: string | null } {
+  const path = history[from] ?? [from];
+  const to = target ?? (path.length > 1 ? path[path.length - 2] : null);
+  if (to === null || to === from) return { history, to: null };
+  return {
+    history: { ...history, [to]: target === null ? path.slice(0, -1) : [...path, to] },
+    to,
+  };
+}
 
 export const APP_ROUTES: Connection[] = [
   { from: 'login', to: 'index', action: 'Sign in', kind: 'app' },
@@ -43,16 +54,17 @@ export function mergeSpineRoutes(
   entries: SpineEntry[],
   routerKeys: string[],
   labels: ReadonlyMap<string, string>,
+  afterSeq = 0,
 ): { routes: Connection[]; spineObserved: Set<string> } {
-  const rows = buildRouteList(entries, routerKeys);
+  const rows = buildRouteList(entries.filter((entry) => entry.seq > afterSeq), routerKeys);
   const spineObserved = new Set<string>();
   const discovered: Connection[] = [];
   const known = new Set(baseRoutes.map(keyOf));
 
   for (const row of rows) {
-    if (row.provenance !== 'observed' || !row.from || row.from === '(tabs)') continue;
+    if (row.provenance !== 'observed' || row.column !== 'current' || !row.from || !labels.has(row.from)) continue;
     const to = destination(row.to);
-    if (to === row.from) continue;
+    if (to === row.from || !labels.has(to)) continue;
     const id = `${row.from}:${to}`;
     spineObserved.add(id);
     if (!known.has(id)) {

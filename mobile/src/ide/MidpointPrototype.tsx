@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { DesigningProvider } from './designing';
 import { routerKeys, screens } from './screens';
 import { PrototypeNavigationContext, type PrototypeAction } from './prototypeNavigation';
@@ -13,12 +13,15 @@ import {
   destination,
   keyOf,
   mergeSpineRoutes,
+  navigateBoardHistory,
+  type BoardHistory,
   resolveFrameOverlap,
   stepFramePosition,
   type Connection,
   type Point,
 } from './midpointBoard';
 import { useHabits } from '../store/habits';
+import { TokensFrom } from '../ds/store';
 import './midpointPrototype.css';
 
 type Activity = Connection & { mode: 'live' | 'preview'; seq: number };
@@ -99,12 +102,18 @@ function roundedPath(points: Point[], radius: number) {
   return `${d} L ${last.x} ${last.y}`;
 }
 
-export function MidpointPrototype() {
+export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
+  baseline?: Record<string, any> | null;
+  focus?: string | null;
+  badge?: ReactNode;
+  reports?: ReactNode;
+}) {
   const spine = useSpine();
   const [includeTabs, setIncludeTabs] = useState(false);
-  const [evidence, setEvidence] = useState<'dashes' | 'badges'>('dashes');
-  const [ports, setPorts] = useState<'spread' | 'exact'>('spread');
-  const [view, setView] = useState<View | null>(null);
+  const [sessionStart, setSessionStart] = useState(spine.seq);
+  const [active, setActive] = useState<Activity | null>(null);
+  const [navigationTarget, setNavigationTarget] = useState<string | null>(null);
+  const [view, setView] = useState<View>({ x: 0, y: 0, k: 0.4 });
   const [fitMode, setFitMode] = useState(true);
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
@@ -116,19 +125,21 @@ export function MidpointPrototype() {
   const [message, setMessage] = useState('No route observed. Use an app control or preview a connection.');
   const [selected, setSelected] = useState(0);
   const [inspector, setInspector] = useState(false);
-  const [positions, setPositions] = useState<Record<string, Point>>(readPositions);
+  const [positions, setPositions] = useState<Record<string, Point>>({});
+  const [positionsReady, setPositionsReady] = useState(false);
   const [dragged, setDragged] = useState<string | null>(null);
   const [zOrder, setZOrder] = useState<string[]>(() => screens.map((s) => s.key));
   const [gap, setGap] = useState<RouteGap>(() => backGap(null));
   const viewport = useRef<HTMLDivElement>(null);
-  const histories = useRef<Record<'live' | 'preview', Record<string, string[]>>>({ live: {}, preview: {} });
+  const histories = useRef<Record<'live' | 'preview', BoardHistory>>({ live: {}, preview: {} });
+  const previewDestination = useRef('habit');
   const seq = useRef(0);
   const drag = useRef<{ id: number; moved: boolean } | null>(null);
   const frameDrag = useRef<{ key: string; id: number; startX: number; startY: number; base: Point; moved: boolean } | null>(null);
   const lastGestureMoved = useRef(false);
   const spaceHeld = useRef(false);
   const flyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const last = activity[0] ?? null;
+  const last = active;
   const k = view?.k ?? 0.4;
   const movedCount = Object.keys(positions).length;
 
@@ -137,7 +148,20 @@ export function MidpointPrototype() {
     if (s.selectedId === null && s.habits[0]) s.select(s.habits[0].id);
   }, []);
 
-  useEffect(() => { writePositions(positions); }, [positions]);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setPositions(readPositions());
+      setPositionsReady(true);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      if (flyTimer.current) clearTimeout(flyTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (positionsReady) writePositions(positions);
+  }, [positions, positionsReady]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -150,14 +174,15 @@ export function MidpointPrototype() {
   const { routes, spineObserved } = useMemo(() => {
     const all = [...APP_ROUTES, ...(includeTabs ? TAB_ROUTES : []), ...extra];
     const unique = all.filter((c, i) => all.findIndex((other) => keyOf(other) === keyOf(c)) === i);
-    return mergeSpineRoutes(unique, spine.entries, routerKeys, LABELS);
-  }, [includeTabs, extra, spine.entries]);
+    return mergeSpineRoutes(unique, spine.entries, routerKeys, LABELS, sessionStart);
+  }, [includeTabs, extra, spine.entries, sessionStart]);
   const allObserved = useMemo(() => new Set([...observed, ...spineObserved]), [observed, spineObserved]);
   const gapCopy = describeBackGap(gap);
   const index = new Map(screens.map((s, i) => [s.key, i]));
   const detours = routes.filter((c) => Math.abs(index.get(c.from)! - index.get(c.to)!) > 1);
   const rowY = 60 + detours.length * LANE;
-  const height = rowY + CAPTION + H + FOOT;
+  const baselineOffset = baseline ? CAPTION + H + FOOT : 0;
+  const height = rowY + CAPTION + H + FOOT + baselineOffset;
   const selectedRoute = routes[Math.min(selected, routes.length - 1)];
   const leftOf = (key: string) => PAD + index.get(key)! * (W + GAP);
   const frameAt = (key: string): Point => {
@@ -178,10 +203,10 @@ export function MidpointPrototype() {
       minX: Math.min(0, ...xs),
       minY: Math.min(0, ...ys),
       maxX: Math.max(width, ...xs.map((x) => x + W)),
-      maxY: Math.max(height, ...ys.map((y) => y + CAPTION + H + FOOT)),
+      maxY: Math.max(height, ...ys.map((y) => y + CAPTION + H + FOOT + baselineOffset)),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positions, rowY]);
+  }, [positions, rowY, baselineOffset]);
 
   const fitView = useCallback(() => {
     const el = viewport.current;
@@ -210,6 +235,15 @@ export function MidpointPrototype() {
     flyTimer.current = setTimeout(() => setFlying(false), 480);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitView, positions, rowY]);
+
+  useEffect(() => {
+    if (navigationTarget === null) return;
+    const id = requestAnimationFrame(() => {
+      flyTo(navigationTarget);
+      setNavigationTarget(null);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [navigationTarget, flyTo]);
 
   const zoomAt = useCallback((cx: number, cy: number, factor: number) => {
     const el = viewport.current;
@@ -263,6 +297,7 @@ export function MidpointPrototype() {
     const down = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]') || event.metaKey || event.ctrlKey) return;
+      if (event.key !== 'Escape' && target.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]')) return;
       if (event.key === ' ') { spaceHeld.current = true; setSpace(true); event.preventDefault(); }
       if (event.key === 'Escape' && frameDrag.current) {
         const key = frameDrag.current.key;
@@ -289,24 +324,22 @@ export function MidpointPrototype() {
   }, [zoomAt, fitView, vpSize]);
 
   const record = (from: string, action: PrototypeAction, href: string | undefined, mode: 'live' | 'preview') => {
-    let to = destination(href);
-    const historyByScreen = histories.current[mode];
-    if (action === 'back') {
-      const history = historyByScreen[from] ?? [];
-      if (history.length < 2) {
-        setMessage(`${labelOf(from)}: no back destination. Navigate into this screen first.`);
-        return;
-      }
-      to = history[history.length - 2];
-      historyByScreen[to] = history.slice(0, -1);
-    } else {
-      if (to === from) {
-        setMessage(`${labelOf(from)} is already the current tab. No navigation connection fired.`);
-        return;
-      }
-      const sourcePath = historyByScreen[from] ?? [from];
-      historyByScreen[to] = [...sourcePath, to];
+    setActive(null);
+    const target = action === 'back' ? null : destination(href);
+    if (!LABELS.has(from) || (target !== null && !LABELS.has(target))) {
+      setMessage('No board destination exists for this route.');
+      return;
     }
+    const next = navigateBoardHistory(histories.current[mode], from, target);
+    const to = next.to;
+    if (to === null) {
+      setMessage(action === 'back'
+        ? `${labelOf(from)}: no back destination. Navigate into this screen first.`
+        : `${labelOf(from)} is already the current tab. No navigation connection fired.`);
+      return;
+    }
+    histories.current[mode] = next.history;
+    if (mode === 'preview') previewDestination.current = to;
     const route = action === 'back'
       ? { from, to, action: 'Back', kind: 'back' as const }
       : [...APP_ROUTES, ...TAB_ROUTES].find((c) => c.from === from && c.to === to) ?? { from, to, action: 'Navigate', kind: 'app' as const };
@@ -315,9 +348,11 @@ export function MidpointPrototype() {
     if (mode === 'live') {
       setObserved((old) => new Set([...old, keyOf(route)]));
       if (action !== 'push') recordRoute({ from, to: to === 'index' ? '/' : `/${to}`, column: 'current' });
-      flyTo(to);
+      setNavigationTarget(to);
     }
-    setActivity((old) => [{ ...route, mode, seq: ++seq.current }, ...old].slice(0, 12));
+    const entry = { ...route, mode, seq: ++seq.current };
+    setActive(entry);
+    setActivity((old) => [entry, ...old].slice(0, 12));
     setMessage(`${mode === 'preview' ? 'Preview only' : 'Observed'}: ${labelOf(from)} → ${labelOf(to)} · ${route.action}`);
   };
 
@@ -339,10 +374,9 @@ export function MidpointPrototype() {
     const toRoutes = routes.filter((r) => r.to === c.to && sideOf(r) === dir);
     const fromPort = fromRoutes.findIndex((r) => keyOf(r) === keyOf(c));
     const toPort = toRoutes.findIndex((r) => keyOf(r) === keyOf(c));
-    const spread = ports === 'spread';
-    const dy = reverseExists && spread ? -dir * 14 : 0;
-    const startY = centerOf(c.from).y + (direct ? dy : spread ? (fromPort - (fromRoutes.length - 1) / 2) * 14 : 0);
-    const endY = centerOf(c.to).y + (direct ? dy : spread ? (toPort - (toRoutes.length - 1) / 2) * 14 : 0);
+    const dy = reverseExists ? -dir * 14 : 0;
+    const startY = centerOf(c.from).y + (direct ? dy : (fromPort - (fromRoutes.length - 1) / 2) * 14);
+    const endY = centerOf(c.to).y + (direct ? dy : (toPort - (toRoutes.length - 1) / 2) * 14);
     const labelFont = Math.min(11 / k, 26);
     if (direct) return { d: `M ${startX} ${startY} L ${endX} ${endY}`, startX, startY, endX, endY, direct, labelX: (startX + endX) / 2, labelY: (startY + endY) / 2 + (dir === 1 ? -labelFont * 1.8 : labelFont * 2.1), labelFont, lane: -1 };
     // Detour lanes stay tied to the declared row, so the lane stack keeps its
@@ -359,6 +393,10 @@ export function MidpointPrototype() {
   const preview = (route: Connection) => record(route.from, route.kind === 'back' ? 'back' : route.kind === 'tab' ? 'tab' : 'push', route.to === 'index' ? '/' : `/${route.to}`, 'preview');
   const reset = () => {
     histories.current = { live: {}, preview: {} };
+    previewDestination.current = 'habit';
+    setSessionStart(spine.seq);
+    setNavigationTarget(null);
+    setActive(null);
     setObserved(new Set()); setActivity([]); setExtra([]); setSelected(0);
     setMessage('No route observed. Use an app control or preview a connection.');
   };
@@ -493,21 +531,22 @@ export function MidpointPrototype() {
   }, [dragged, view, rowY]);
 
   return (
-    <main className="mp">
+    <main className="mp" aria-label="Studio board" data-layout-ready={positionsReady && Boolean(view)}>
       <header className="mp-header">
-        <a className="mp-brand" href="/ide"><span className="mp-brand-icon">S</span><span>Streak Studio</span></a>
+        <div className="mp-brand"><span className="mp-brand-icon">S</span><span>Streak Studio</span></div>
         <span className="mp-header-divider" />
-        <div className="mp-heading"><h1>Navigation blueprint</h1><span>Canvas prototype · real app screens · drag frames · pan and zoom</span></div>
+        <div className="mp-heading"><h1>Navigation board</h1><span>Real app screens · drag frames · pan and zoom</span></div>
+        {badge}
         <div className="mp-header-actions"><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
       </header>
 
-      <section className="mp-toolbar" aria-label="Prototype controls">
+      <section className="mp-toolbar" aria-label="Board controls">
         <div className="mp-scope" role="group" aria-label="Route scope">
-          <button type="button" aria-pressed={!includeTabs} onClick={() => setIncludeTabs(false)}>App actions <span>7</span></button>
-          <button type="button" aria-pressed={includeTabs} onClick={() => setIncludeTabs(true)}>Include tabs <span>+12</span></button>
+          <button type="button" aria-pressed={!includeTabs} onClick={() => setIncludeTabs(false)}>App actions <span>{APP_ROUTES.length}</span></button>
+          <button type="button" aria-pressed={includeTabs} onClick={() => setIncludeTabs(true)}>Include tabs <span>+{TAB_ROUTES.length}</span></button>
         </div>
-        <label>Evidence<select aria-label="Route evidence style" value={evidence} onChange={(e) => setEvidence(e.target.value as typeof evidence)}><option value="dashes">Dashed before use</option><option value="badges">Evidence badges</option></select></label>
-        <label>Ports<select aria-label="Connector ports" value={ports} onChange={(e) => setPorts(e.target.value as typeof ports)}><option value="spread">Small spread</option><option value="exact">Exact midpoint</option></select></label>
+        <span className="mp-legend">Dashed: {ROUTE_PROVENANCE.declared.label} · Solid: {ROUTE_PROVENANCE.observed.label}</span>
+        {view && reports && <details className="mp-reports"><summary>Studio evidence</summary><div>{reports}</div></details>}
         <div className="mp-viewhint">The camera flies to the screen each navigation lands on.</div>
       </section>
 
@@ -533,16 +572,14 @@ export function MidpointPrototype() {
                   const seen = allObserved.has(id);
                   const active = last && keyOf(last) === id;
                   const color = active ? 'var(--accent)' : seen ? 'var(--line-used)' : g.direct ? 'var(--line-direct)' : 'var(--line)';
-                  const evidenceText = !g.direct && evidence === 'badges' ? ` · ${ROUTE_PROVENANCE[seen ? 'observed' : 'declared'].label}` : '';
-                  const shortAction = g.direct ? route.action.replace(/^(Open |Tab: )/, '') : route.action;
-                  const labelText = `${shortAction}${evidenceText}`;
+                  const labelText = g.direct ? route.action.replace(/^(Open |Tab: )/, '') : route.action;
                   const labelWidth = labelText.length * g.labelFont * 0.56 + g.labelFont * 1.6;
                   const labelHeight = g.labelFont * 2;
                   return (
                     <g key={id} data-connection={id} data-direct={g.direct} data-active={Boolean(active)} data-evidence={seen ? 'observed' : 'declared'}>
-                      <title>{labelOf(route.from)} → {labelOf(route.to)}: {route.action}. {seen ? 'Observed' : 'Declared'}.</title>
+                      <title>{`${labelOf(route.from)} → ${labelOf(route.to)}: ${route.action}. ${seen ? 'Observed' : 'Declared'}.`}</title>
                       <path d={g.d} fill="none" stroke="var(--canvas)" strokeWidth={6} strokeLinejoin="round" />
-                      <path d={g.d} fill="none" stroke={color} strokeWidth={active ? 3 : 2.2} strokeDasharray={!seen && evidence === 'dashes' ? '10 10' : undefined} strokeLinecap="round" markerEnd={`url(#mp-arrow-${active ? 'active' : seen ? 'used' : 'rest'})`} />
+                      <path d={g.d} fill="none" stroke={color} strokeWidth={active ? 3 : 2.2} strokeDasharray={!seen ? '10 10' : undefined} strokeLinecap="round" markerEnd={`url(#mp-arrow-${active ? 'active' : seen ? 'used' : 'rest'})`} />
                       <circle cx={g.startX} cy={g.startY} r={3.4} fill="var(--canvas)" stroke={color} strokeWidth={1.8} />
                       {!g.direct && <circle cx={g.endX} cy={g.endY} r={3.4} fill="var(--canvas)" stroke={color} strokeWidth={1.8} />}
                       <g><rect x={g.labelX - labelWidth / 2} y={g.labelY - labelHeight / 2} width={labelWidth} height={labelHeight} rx={g.labelFont * 0.6} fill={active ? 'var(--label-active)' : 'var(--canvas)'} stroke={active ? 'var(--accent-border)' : 'var(--border)'} strokeWidth={1.2} /><text x={g.labelX} y={g.labelY + g.labelFont * 0.36} textAnchor="middle" fill={active ? 'var(--accent)' : 'var(--muted)'} fontWeight={active ? 600 : 400} fontSize={g.labelFont}>{labelText}</text></g>
@@ -555,7 +592,7 @@ export function MidpointPrototype() {
                 const p = frameAt(key);
                 const z = dragged === key ? 10 : 1 + Math.max(0, zOrder.indexOf(key));
                 return (
-                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} style={{ left: p.x, top: p.y, width: W, zIndex: z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
+                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-focused={focus === key} data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} style={{ left: p.x, top: p.y, width: W, zIndex: z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
                     <header className="mp-frame-heading" role="button" tabIndex={0} aria-label={`Move ${label} frame`} title="Drag or use arrow keys to move this screen frame" onFocus={() => setZOrder((old) => bringToFront(old, key))} onKeyDown={onHandleKeyDown(key)} onPointerDown={onHandlePointerDown(key)} onDoubleClick={onFrameDoubleClick(key)}><Grip /><span>{String(i + 1).padStart(2, '0')}</span><strong>{label}</strong><code>{key === 'index' ? '/' : `/${key}`}</code></header>
                     <div id={frameId(key)} className="mp-phone" style={{ width: W, height: H }}>
                       <PrototypeNavigationContext.Provider value={(action, href) => record(key, action, href, 'live')}><DesigningProvider screenKey={key} column="current"><Component /></DesigningProvider></PrototypeNavigationContext.Provider>
@@ -564,6 +601,19 @@ export function MidpointPrototype() {
                   </section>
                 );
               })}
+              {baseline && <TokensFrom source={{ kind: 'pinned', tree: baseline, label: 'HEAD' }}>
+                {screens.map(({ key, label, Component }, i) => {
+                  const p = frameAt(key);
+                  return (
+                    <section key={`base-${key}`} className="mp-frame mp-baseline" style={{ left: p.x, top: p.y + baselineOffset, width: W, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
+                      <header className="mp-frame-heading"><span>{String(i + 1).padStart(2, '0')}</span><strong>{label} · HEAD</strong></header>
+                      <div id={frameId(key, true)} className="mp-phone" style={{ width: W, height: H }}>
+                        <DesigningProvider screenKey={key} column="comparison"><Component /></DesigningProvider>
+                      </div>
+                    </section>
+                  );
+                })}
+              </TokensFrom>}
             </div>}
 
             <div className="mp-canvas-controls">
@@ -583,7 +633,7 @@ export function MidpointPrototype() {
       </div>
 
       <section className="mp-status" aria-live="polite"><span className={last?.mode === 'live' ? 'mp-status-live' : 'mp-status-label'}>{last ? last.mode === 'live' ? 'OBSERVED' : 'PREVIEW' : 'READY'}</span><span>{message}</span><small>{allObserved.size} observed · {routes.length} visible · {gapCopy.label} · {includeTabs ? 'tab routes included' : `${TAB_ROUTES.length} tab routes hidden`}{movedCount > 0 ? ` · ${movedCount} frame${movedCount === 1 ? '' : 's'} moved` : ''}</small></section>
-      <footer className="mp-footer"><p className="mp-footer-hint">Drag a screen header or footer, or focus a header and press arrow keys, to move that frame. Drag empty board space to move the board. <kbd>Shift</kbd> locks one axis. <kbd>Esc</kbd> cancels a move. <kbd>0</kbd> fits the whole board. Reset layout restores frames and camera.</p><div className="mp-preview-controls"><label className="mp-action-select">Try a connection<select aria-label="Preview route" value={Math.min(selected, routes.length - 1)} onChange={(e) => setSelected(Number(e.target.value))}>{routes.map((r, i) => <option key={keyOf(r)} value={i}>{labelOf(r.from)} → {labelOf(r.to)} · {r.action}</option>)}</select></label><button type="button" className="mp-primary" onClick={() => selectedRoute && preview(selectedRoute)}>Preview →</button><button type="button" onClick={() => { const from = last?.to ?? 'habit'; record(from, 'back', undefined, 'preview'); }}>Back</button></div></footer>
+      <footer className="mp-footer"><p className="mp-footer-hint">Drag a screen header or footer, or focus a header and press arrow keys, to move that frame. Drag empty board space to move the board. <kbd>Shift</kbd> locks one axis. <kbd>Esc</kbd> cancels a move. <kbd>0</kbd> fits the whole board. Reset layout restores frames and camera.</p><div className="mp-preview-controls"><label className="mp-action-select">Try a connection<select aria-label="Preview route" value={Math.min(selected, routes.length - 1)} onChange={(e) => setSelected(Number(e.target.value))}>{routes.map((r, i) => <option key={keyOf(r)} value={i}>{labelOf(r.from)} → {labelOf(r.to)} · {r.action}</option>)}</select></label><button type="button" className="mp-primary" onClick={() => selectedRoute && preview(selectedRoute)}>Preview →</button><button type="button" onClick={() => { record(previewDestination.current, 'back', undefined, 'preview'); }}>Back</button></div></footer>
     </main>
   );
 }

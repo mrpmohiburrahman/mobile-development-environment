@@ -47,7 +47,7 @@ The whole thing is six ideas.
 
 **4. The studio's own chrome reads no tokens.** Dragging `type.caption.size` used to resize the editor's own labels. The chrome has its own fixed type scale and palette now, so the control for a token cannot distort the studio while you adjust it.
 
-**5. Screens know when they're being designed.** Inside the blueprint a tap must not navigate, or the whole artboard would sail off to one route. Screens call `useNavigate()` from [`designing.tsx`](mobile/src/ide/designing.tsx), which no-ops under a `DesigningProvider`. Context rather than a `designing` prop, because Expo Router owns screen mounting — there's no single call site to thread a prop from.
+**5. Screens know when they are on the board.** Screens call `useNavigate()` from [`designing.tsx`](mobile/src/ide/designing.tsx). Inside a `DesigningProvider`, navigation stays on the board. The Guide camera centers the destination frame. Board-local history resolves Back. An empty history has no destination. Preview actions use separate history and never count as observed journeys.
 
 Screens are enumerated from the router directory with `require.context`, so adding a route file puts it on the artboard automatically. A hand-written import list goes stale the first time someone forgets — which is exactly the drift the blueprint exists to catch.
 
@@ -65,6 +65,21 @@ npm run preview
 ```
 
 Then open **http://localhost:8080/ide**.
+
+The normal studio and static export use the Contour board with the Guide camera. No prototype parameter is necessary.
+Drag a frame header or footer to move it. Focus a header to use arrow keys, Shift, Home, or Enter.
+Frame positions persist in local storage. They never change declared screen order.
+**Fit** changes only the camera. **Reset layout** restores frame positions and the camera.
+**Reset session** clears board journeys and observations. It preserves layout, token edits, app state, and the state log.
+
+Run the browser checks against this export:
+
+```bash
+npm run test:board
+```
+
+The check uses one Chromium browser and a temporary static server. It starts no build or token writer.
+For a subpath export, use the same `EXPO_BASE_URL` value for this command.
 
 `export:web` writes `dist/`. It bakes the token-server URL `http://127.0.0.1:9`. The client treats that value as read-only and makes no token-server requests. Browsers also block port 9. A local writer cannot receive edits from this build. The export checks every HTML page for incomplete server rendering and verifies its script and stylesheet files.
 
@@ -103,9 +118,9 @@ Three panels answer three questions about the running app, and none of them need
 
 **state** is a change log, not a snapshot. Toggle a habit's check on the board and a row appears naming the store it landed in, the path that moved, and its old and new value. Sign in while you are already signed in and no row appears, because the log records what changed rather than what was called. The log watches both stores, so switching the colour scheme in the Settings frame — which repaints every frame on the board — is a row rather than a silence. The live state tree stays below the log, because the log cannot answer "what is it right now".
 
-**routes** lists how the screens connect. Each row says how it was learned: **observed** at the studio's navigation seam, **declared** from the router's directory, or **unresolved**. The four tab destinations are real routes the studio cannot watch, because the tab bar reaches the router directly and the studio does not edit that file. The back control resolves against history at press time, so it is reported as a gap with a count rather than drawn as an edge. The counts come before the list, so a reader who sees a headline number is told how it was arrived at.
+**routes** lists navigation evidence and highlights the selected frame. The board shows declared routes before interaction. Dashed connections are declared. Solid connections are observed. The active connection stays accented until the next navigation action. Direct connections use side midpoints. Detours use separate lanes above the row. **Include tabs** displays the declared tab connections. App controls record observed routes without leaving the studio.
 
-**the board header** counts every press. Roughly half the controls on the board dim under your finger and then do nothing — the avatar, the stats card, all sixteen tab taps, the back bars. A press that changed nothing is reported as **inert in the studio**, which names the studio's limitation rather than calling the control broken. The studio cannot tell a control that is inert here from one that is unimplemented everywhere, so it does not claim to.
+**Studio evidence** contains the control inventory, press counts, and render fidelity measurements. A press that changes nothing is **inert in the studio**. Tab controls and Back now use board navigation in current frames. Comparison frames retain their navigation guards. Settings controls with empty handlers remain declared inert.
 
 A press is never reported as the cause of a change. The log shows what changed and where the press landed as two facts side by side, with no arrow between them, because the change usually repaints a different frame than the one pressed.
 
@@ -178,5 +193,5 @@ scripts/
 - Drift detection reports store state as it is. A screen showing an empty state reports nothing even if its populated state would drift.
 - The compare view draws 14 screens at once. It is opt-in, and it runs fine at `reactCompiler: true` — but it is a deliberate toggle, not the default.
 - The change log keeps its last 200 rows and says so when it drops any. It is not persisted: reloading the page clears it, because the deployed build is per-visitor and its state is too.
-- The four tab routes are declared from the router directory rather than watched, and the back control is counted from the board rather than resolved. Neither can be more than that without editing the app's own files, which the guard forbids.
+- Board-local history resets on reload. Preview history stays separate from observed journeys. Reset session clears board history and evidence, not app state or the state log.
 - The render verdict describes this browser, on this machine. A machine with the named display font installed will print a different answer, which is the point.

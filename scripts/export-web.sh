@@ -22,7 +22,7 @@ cd "$(dirname "$0")/.."
 rm -rf dist
 (
   cd mobile
-  EXPO_PUBLIC_TOKEN_SERVER="$BLOCKED_URL" npx expo export --platform web --output-dir ../dist
+  EXPO_PUBLIC_TOKEN_SERVER="$BLOCKED_URL" npx expo export --platform web --output-dir ../dist "$@"
 )
 
 if ! grep -R -q -F "$READ_ONLY_MESSAGE" dist/_expo; then

@@ -10,6 +10,7 @@ import {
   bringToFront,
   buildTabConnections,
   mergeSpineRoutes,
+  navigateBoardHistory,
   resolveFrameOverlap,
   stepFramePosition,
 } from '../mobile/src/ide/midpointBoard.ts';
@@ -49,6 +50,65 @@ test('mergeSpineRoutes marks spine-observed routes and adds newly discovered rou
   assert.ok(merged.routes.some((r) => r.from === 'settings' && r.to === 'index'));
 });
 
+test('Back has no destination without an incoming board journey', () => {
+  const history = {};
+  assert.deepEqual(navigateBoardHistory(history, 'habit', null), { history, to: null });
+});
+
+test('Back follows each destination latest incoming path', () => {
+  const first = navigateBoardHistory({}, 'index', 'habit');
+  assert.equal(navigateBoardHistory(first.history, 'habit', null).to, 'index');
+  const latest = navigateBoardHistory(first.history, 'habits', 'habit');
+  const back = navigateBoardHistory(latest.history, 'habit', null);
+  assert.equal(back.to, 'habits');
+  assert.equal(navigateBoardHistory(back.history, 'habits', null).to, null);
+  assert.equal(navigateBoardHistory(first.history, 'habit', null).to, 'index');
+});
+
+test('Back traverses multiple steps without browser history', () => {
+  const profile = navigateBoardHistory({}, 'index', 'profile');
+  const settings = navigateBoardHistory(profile.history, 'profile', 'settings');
+  const back = navigateBoardHistory(settings.history, 'settings', null);
+  assert.equal(back.to, 'profile');
+  const home = navigateBoardHistory(back.history, 'profile', null);
+  assert.equal(home.to, 'index');
+  assert.equal(navigateBoardHistory(home.history, 'index', null).to, null);
+});
+
+test('preview history does not supply a live Back destination', () => {
+  const live = {};
+  const preview = navigateBoardHistory({}, 'index', 'habit');
+  assert.equal(navigateBoardHistory(preview.history, 'habit', null).to, 'index');
+  assert.equal(navigateBoardHistory(live, 'habit', null).to, null);
+});
+
+test('the current board excludes comparison routes and unknown screen destinations', () => {
+  let state = createSpine();
+  for (const route of [
+    { from: 'profile', to: '/settings', column: 'comparison' as const },
+    { from: 'index', to: '/missing', column: 'current' as const },
+    { from: 'missing', to: '/habit', column: 'current' as const },
+  ]) {
+    state = spineReducer(state, { kind: 'route', ...route });
+    state = spineReducer(state, { kind: 'flush' });
+  }
+  const merged = mergeSpineRoutes(APP_ROUTES, state.entries, ALL_ROUTER_KEYS, LABELS);
+  assert.deepEqual(merged.routes, APP_ROUTES);
+  assert.equal(merged.spineObserved.size, 0);
+});
+
+test('a session boundary excludes earlier evidence without deleting the state log', () => {
+  let state = createSpine();
+  state = spineReducer(state, { kind: 'route', from: 'index', to: '/habit', column: 'current' });
+  state = spineReducer(state, { kind: 'flush' });
+  const boundary = state.seq;
+  state = spineReducer(state, { kind: 'route', from: 'profile', to: '/settings', column: 'current' });
+  state = spineReducer(state, { kind: 'flush' });
+  const merged = mergeSpineRoutes(APP_ROUTES, state.entries, ALL_ROUTER_KEYS, LABELS, boundary);
+  assert.deepEqual([...merged.spineObserved], ['profile:settings']);
+  assert.equal(state.entries.length, 2);
+});
+
 test('bringToFront moves the interacted frame to the top of the z-order without duplicating keys', () => {
   const initial = ['login', 'index', 'habits', 'habit'];
   assert.deepEqual(bringToFront(initial, 'index'), ['login', 'habits', 'habit', 'index']);
@@ -78,7 +138,16 @@ test('stepFramePosition moves by 16px, 48px with Shift, and resets on Home', () 
   assert.equal(stepFramePosition({ x: 10, y: 20 }, 'a', false), null);
 });
 
-test('MidpointPrototype derives tab routes, provenance, and frame ids from the shared studio modules', () => {
+test('the normal studio renders the board without a development gate', () => {
+  const route = readFileSync(join(ROOT, 'mobile/src/app/ide.tsx'), 'utf8');
+  const blueprint = readFileSync(join(ROOT, 'mobile/src/ide/Blueprint.tsx'), 'utf8');
+  assert.doesNotMatch(route, /__DEV__|params\.prototype/);
+  assert.match(route, /<Blueprint comparing=\{comparing\} focus=\{focus\}/);
+  assert.match(blueprint, /<StudioBoard/);
+  assert.match(blueprint, /const baseline = comparing \? tree : null/);
+});
+
+test('the board derives tab routes, provenance, and frame ids from shared studio modules', () => {
   const src = readFileSync(join(ROOT, 'mobile/src/ide/MidpointPrototype.tsx'), 'utf8');
   assert.match(src, /from '\.\/midpointBoard'/);
   assert.match(src, /from '\.\/routes'/);

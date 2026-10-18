@@ -64,8 +64,8 @@ test('the press listener runs in the capture phase, not the bubble phase', () =>
     /addEventListener\('click',\s*handle\s*\)/,
     'a listener with no capture flag is the bubble phase, which is the bug',
   );
-  // And it attaches to the workspace node, the same node the zoom listener uses.
-  assert.match(blueprint, /addEventListener\('wheel'/);
+  assert.match(code('mobile/src/ide/MidpointPrototype.tsx'), /addEventListener\('wheel'/);
+  assert.match(blueprint, /<StudioBoard/);
 });
 
 test('the press listener identifies frames by the platform id, never a data attribute', () => {
@@ -82,7 +82,9 @@ test('the press listener identifies frames by the platform id, never a data attr
   // duplication: the ids and the walks that look for them were two copies of one
   // rule, and a prefix renamed in one of them would leave the walks finding zero
   // frames while every panel reported that the comparison simply had not run yet.
-  assert.match(blueprint, /nativeID=\{frameId\(screenKey, baseline\)\}/);
+  const board = code('mobile/src/ide/MidpointPrototype.tsx');
+  assert.match(board, /id=\{frameId\(key\)\}/);
+  assert.match(board, /id=\{frameId\(key, true\)\}/);
   // No id built by hand. Scoped to `nativeID` rather than to the prefixes, because
   // the baseline column's React `key` legitimately spells `base-<key>` and is not a
   // DOM id — asserting on the bare prefix would fail on the wrong thing.
