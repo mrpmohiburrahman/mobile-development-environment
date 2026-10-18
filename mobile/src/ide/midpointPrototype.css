@@ -167,8 +167,7 @@
 .mp-present-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .mp-present-label strong { font-size: 13px; font-weight: 600; letter-spacing: -.1px; white-space: nowrap; }
 .mp-present-label > span { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
-.mp-present-scheme { font-size: 11px; color: var(--muted); padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--canvas); }
-.mp-present-hint { font: 10px var(--mono); color: var(--muted); letter-spacing: .4px; white-space: nowrap; }
+.mp-presentbar button { font-size: 11px; }
 
 .mp.mp-presenting .mp-frame:not([data-presented='true']) { visibility: hidden; }
 .mp.mp-presenting .mp-connectors { visibility: hidden; }

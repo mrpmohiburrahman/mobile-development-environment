@@ -5,6 +5,7 @@ import {
   presentKeyboardDecision,
   presentTransform,
   stepDeclaredScreen,
+  nearestScreenToPoint,
   declaredPosition,
   FRAME_HEIGHT,
   SCALE_MIN,
@@ -23,7 +24,7 @@ test('presentScale fits the frame to viewport height over 820', () => {
   assert.equal(presentScale(FRAME_HEIGHT), 1);
 });
 
-test('presentTransform centers the presented frame in the viewport', () => {
+test('presentTransform centers the presented app surface in the viewport', () => {
   const t = presentTransform(100, 200, 390, FRAME_HEIGHT, 1200, 900, 1);
   assert.equal(t.k, 1);
   assert.equal(t.x, 1200 / 2 - (100 + 390 / 2) * 1);
@@ -42,6 +43,12 @@ test('stepDeclaredScreen follows declared order and clamps at the ends', () => {
   assert.equal(stepDeclaredScreen(KEYS, 'missing', 1), null);
 });
 
+test('nearestScreenToPoint picks the frame nearest the camera center', () => {
+  const centers = { login: { x: 0, y: 0 }, index: { x: 100, y: 0 }, habits: { x: 200, y: 100 } };
+  assert.equal(nearestScreenToPoint(centers, ['login', 'index', 'habits'], { x: 195, y: 95 }), 'habits');
+  assert.equal(nearestScreenToPoint({}, ['login'], { x: 0, y: 0 }), null);
+});
+
 test('declaredPosition reports the 1-based declared slot', () => {
   assert.deepEqual(declaredPosition(KEYS, 'index'), { current: 2, total: 7 });
   assert.deepEqual(declaredPosition(KEYS, 'missing'), { current: 0, total: 7 });
@@ -53,7 +60,8 @@ test('presentKeyboardDecision enters with P only outside Present', () => {
   assert.deepEqual(presentKeyboardDecision({ ...base, key: 'P', presenting: false }), { action: 'enter' });
   assert.equal(presentKeyboardDecision({ ...base, key: 'ArrowRight', presenting: false }), null);
   assert.equal(presentKeyboardDecision({ ...base, key: 'Escape', presenting: false }), null);
-  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'p', presenting: true }), null);
+  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'p', presenting: true }), { action: 'exit' });
+  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'P', presenting: true }), { action: 'exit' });
 });
 
 test('presentKeyboardDecision steps, toggles scheme, and exits while presenting', () => {
@@ -62,7 +70,8 @@ test('presentKeyboardDecision steps, toggles scheme, and exits while presenting'
   assert.deepEqual(presentKeyboardDecision({ ...base, key: 'ArrowRight' }), { action: 'step', delta: 1 });
   assert.deepEqual(presentKeyboardDecision({ ...base, key: 'l' }), { action: 'toggleScheme' });
   assert.deepEqual(presentKeyboardDecision({ ...base, key: 'L' }), { action: 'toggleScheme' });
-  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'Escape' }), { action: 'exit', prevent: false });
+  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'Escape' }), { action: 'exit' });
+  assert.deepEqual(presentKeyboardDecision({ ...base, key: 'p' }), { action: 'exit' });
 });
 
 test('global shortcuts stay quiet while editing text or another control holds focus', () => {
@@ -71,6 +80,10 @@ test('global shortcuts stay quiet while editing text or another control holds fo
   assert.equal(presentKeyboardDecision({ ...editing, key: 'Escape' }), null);
   const control = { targetEditable: false, targetControl: true, presenting: true };
   assert.equal(presentKeyboardDecision({ ...control, key: 'ArrowRight' }), null);
+  assert.equal(presentKeyboardDecision({ ...control, key: 'Escape' }), null);
+  assert.equal(presentKeyboardDecision({ ...control, key: 'l' }), null);
   const entering = { targetEditable: true, targetControl: false, presenting: false };
   assert.equal(presentKeyboardDecision({ ...entering, key: 'p' }), null);
+  const focusedButton = { targetEditable: false, targetControl: true, presenting: false };
+  assert.equal(presentKeyboardDecision({ ...focusedButton, key: 'p' }), null);
 });

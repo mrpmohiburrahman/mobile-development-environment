@@ -13,9 +13,9 @@ import { create } from 'zustand';
  * writer.
  *
  * Keep the field name `presentedKey` distinct from the camera's working state:
- * this is the *settled* screen, written at fly rest and on entering Present,
- * not the camera's target mid-flight. Momentum-events-of-state, not the state
- * itself -- the log keeps the events; the UI keeps this one value.
+ * this is the screen the presenter should see. `flyTo` writes it when a camera
+ * flight starts. Live navigation and Present entry also write it. The log keeps
+ * the events; the UI keeps this one value.
  */
 type ScreenState = {
   presentedKey: string | null;

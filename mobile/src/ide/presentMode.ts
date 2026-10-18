@@ -12,9 +12,9 @@
  * and state live there; decision logic lives here, where Node tests can reach
  * it without a browser.
  *
- * Enter through the Present button or the `P` key. Exit through Escape or the
- * present bar's Exit button. Shareable-URL entry belongs to ticket 22 and is
- * not implemented here; nothing in this module reads the URL.
+ * Enter through the Present button or the `P` key. `Escape`, `P`, and the
+ * present bar's Exit button exit. Shareable-URL entry belongs to ticket 22 and
+ * is not implemented here; nothing in this module reads the URL.
  */
 
 export const FRAME_HEIGHT = 820;
@@ -29,8 +29,7 @@ export function presentScale(viewportHeight: number): number {
 
 /**
  * Declared screen order is the reading order the presenter steps through: the
- * index of the current key, stepped by `delta`, clamped to the row. Not
- * window-sizes-never-match aware; the row is seven screens, not a viewport.
+ * index of the current key, stepped by `delta`, clamped to the row.
  */
 export function stepDeclaredScreen(keys: readonly string[], currentKey: string, delta: number): string | null {
   const i = keys.indexOf(currentKey);
@@ -39,16 +38,32 @@ export function stepDeclaredScreen(keys: readonly string[], currentKey: string, 
   return keys[next] ?? null;
 }
 
+/** The key nearest a board-space point, used when no camera screen exists. */
+export function nearestScreenToPoint(
+  centers: Readonly<Record<string, Point>>,
+  keys: readonly string[],
+  point: Point,
+): string | null {
+  let best: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const key of keys) {
+    const center = centers[key];
+    if (!center) continue;
+    const distance = Math.hypot(center.x - point.x, center.y - point.y);
+    if (distance < bestDistance) {
+      best = key;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 /** `1 / N` indicator: current declared position and total. */
 export function declaredPosition(keys: readonly string[], key: string): { current: number; total: number } {
   return { current: keys.indexOf(key) + 1, total: keys.length };
 }
 
-export type PresentKeyAction =
-  | { type: 'exit' }
-  | { type: 'step'; delta: number }
-  | { type: 'toggleScheme' }
-  | { type: 'enter' };
+export type Point = { x: number; y: number };
 
 export type KeyContext = {
   key: string;
@@ -58,28 +73,27 @@ export type KeyContext = {
 };
 
 export type PresentKeyResult =
-  | { action: 'exit'; prevent: false }
+  | { action: 'exit' }
   | { action: 'step'; delta: number }
   | { action: 'toggleScheme' }
   | { action: 'enter' };
 
 /**
  * Keyboard contract. Global shortcuts do nothing while the user edits text or
- * another control holds focus; board chrome such as the exit button stays its
- * own button. Escape exits because there is no mode to escape into.
- * The present bar's scheme toggle and Exit are ordinary buttons; while
- * presenting, focus sits on the frame the presenter came from, so clicking
- * them refocuses rather than firing -- the keyboard contract is therefore the
- * operative one, and the bar labels it.
+ * another control holds focus. `P` and `Escape` exit while presenting. Arrow
+ * keys step. `L` changes scheme.
  */
 export function presentKeyboardDecision(ctx: KeyContext): PresentKeyResult | null {
-  if (ctx.targetEditable || ctx.targetControl) return null;
+  if (ctx.targetEditable) return null;
   if (!ctx.presenting) {
-    return ctx.key === 'p' || ctx.key === 'P' ? { action: 'enter' } : null;
+    return !ctx.targetControl && (ctx.key === 'p' || ctx.key === 'P') ? { action: 'enter' } : null;
   }
+  if (ctx.targetControl) return null;
   switch (ctx.key) {
     case 'Escape':
-      return { action: 'exit', prevent: false };
+    case 'p':
+    case 'P':
+      return { action: 'exit' };
     case 'ArrowLeft':
       return { action: 'step', delta: -1 };
     case 'ArrowRight':
@@ -93,22 +107,23 @@ export function presentKeyboardDecision(ctx: KeyContext): PresentKeyResult | nul
 }
 
 /**
- * Center translation that keeps the presented phone dead-center in the
- * viewport, independent of the board camera. The frame box is the phone plus
- * its 48px caption, so centering the frame would leave the phone `48 * scale`
- * pixels low; this centers on the phone box. The frame lives inside the board
- * world at its board position; this maps that position to the viewport center.
+ * Center translation that keeps the presented app surface dead-center in the
+ * viewport, independent of the board camera. The screen frame is the app
+ * surface plus its 48px header, so centering the frame would leave the app
+ * surface `48 * scale` pixels low. This centers on the app surface. The frame
+ * lives inside the board world at its board position; this maps that position
+ * to the viewport center.
  */
 export function presentTransform(
   frameLeft: number,
-  phoneTop: number,
-  phoneWidth: number,
-  phoneHeight: number,
+  surfaceTop: number,
+  surfaceWidth: number,
+  surfaceHeight: number,
   viewportWidth: number,
   viewportHeight: number,
   scale: number,
 ): { x: number; y: number; k: number } {
-  const x = viewportWidth / 2 - (frameLeft + phoneWidth / 2) * scale;
-  const y = viewportHeight / 2 - (phoneTop + phoneHeight / 2) * scale;
+  const x = viewportWidth / 2 - (frameLeft + surfaceWidth / 2) * scale;
+  const y = viewportHeight / 2 - (surfaceTop + surfaceHeight / 2) * scale;
   return { x, y, k: scale };
 }

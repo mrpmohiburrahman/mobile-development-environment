@@ -22,7 +22,7 @@ import {
 } from './midpointBoard';
 import { PresentBar } from './PresentBar';
 import { useScreenState } from './screen.state';
-import { presentKeyboardDecision, presentScale, presentTransform, declaredPosition } from './presentMode';
+import { presentKeyboardDecision, presentScale, presentTransform, declaredPosition, stepDeclaredScreen, nearestScreenToPoint } from './presentMode';
 import { useEditorStore } from '../ds/editorState';
 import { useHabits } from '../store/habits';
 import { TokensFrom } from '../ds/store';
@@ -262,49 +262,61 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
       const target = event.target as HTMLElement | null;
       const editable = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
       const control = Boolean(target?.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]'));
-      if (editable) return;
-      if (!control) event.preventDefault();
-      if (event.key === 'l' || event.key === 'L') {
-        const cur = useEditorStore.getState().scheme;
-        setScheme(cur === 'light' ? 'dark' : 'light');
-        event.preventDefault();
-        return;
-      }
       const decision = presentKeyboardDecision({ key: event.key, targetEditable: editable, targetControl: control, presenting });
       if (!decision) return;
+      event.preventDefault();
       if (decision.action === 'exit') setPresenting(false);
       else if (decision.action === 'step') {
         const key = useScreenState.getState().presentedKey;
         if (!key) return;
-        const keys = screens.map((s) => s.key);
-        const i = keys.indexOf(key);
-        const next = keys[Math.min(keys.length - 1, Math.max(0, i + decision.delta))];
+        const next = stepDeclaredScreen(screens.map((s) => s.key), key, decision.delta);
         if (next) setPresentedKey(next);
       } else if (decision.action === 'toggleScheme') {
         const cur = useEditorStore.getState().scheme;
         setScheme(cur === 'light' ? 'dark' : 'light');
       }
-      if ('prevent' in decision && decision.prevent) event.preventDefault();
-      if (decision.action === 'step' || decision.action === 'toggleScheme') event.preventDefault();
     };
     window.addEventListener('keydown', decide);
     return () => window.removeEventListener('keydown', decide);
   }, [presenting, setPresentedKey, setScheme, setPresenting]);
 
-  const enterPresent = () => {
-    const key = useScreenState.getState().presentedKey ?? screens[0]?.key;
+  const enterPresent = useCallback(() => {
+    const current = useScreenState.getState().presentedKey;
+    if (current) {
+      setPresenting(true);
+      return;
+    }
+    const el = viewport.current;
+    if (!el || !view) {
+      setPresenting(true);
+      return;
+    }
+    const centerX = (el.clientWidth / 2 - view.x) / view.k;
+    const centerY = (el.clientHeight / 2 - view.y) / view.k;
+    const keys = screens.map((screen) => screen.key);
+    const centers = Object.fromEntries(keys.map((key) => [key, centerOf(key)]));
+    const key = nearestScreenToPoint(centers, keys, { x: centerX, y: centerY });
     if (key) setPresentedKey(key);
     setPresenting(true);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, rowY, positions, setPresentedKey, setPresenting]);
 
   useEffect(() => {
-    if (navigationTarget === null) return;
+    if (!navigationTarget) return;
+    const presenting = useScreenState.getState().presenting;
+    if (presenting) {
+      const id = requestAnimationFrame(() => {
+        setPresentedKey(navigationTarget);
+        setNavigationTarget(null);
+      });
+      return () => cancelAnimationFrame(id);
+    }
     const id = requestAnimationFrame(() => {
       flyTo(navigationTarget);
       setNavigationTarget(null);
     });
     return () => cancelAnimationFrame(id);
-  }, [navigationTarget, flyTo]);
+  }, [navigationTarget, flyTo, setPresentedKey]);
 
   const zoomAt = useCallback((cx: number, cy: number, factor: number) => {
     const el = viewport.current;
@@ -344,7 +356,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
 
   useEffect(() => {
     const el = viewport.current;
-    if (!el) return;
+    if (!el || presenting) return;
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.12 : 1 / 1.12);
@@ -352,9 +364,10 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     };
     el.addEventListener('wheel', wheel, { passive: false });
     return () => el.removeEventListener('wheel', wheel);
-  }, [zoomAt, panBy]);
+  }, [zoomAt, panBy, presenting]);
 
   useEffect(() => {
+    if (presenting) return;
     const down = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]') || event.metaKey || event.ctrlKey) return;
@@ -382,7 +395,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, [zoomAt, fitView, vpSize]);
+  }, [zoomAt, fitView, vpSize, presenting]);
 
   useEffect(() => {
     if (presenting) return;
@@ -395,7 +408,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [presenting, enterPresent]);
 
   const record = (from: string, action: PrototypeAction, href: string | undefined, mode: 'live' | 'preview') => {
     setActive(null);
@@ -491,10 +504,11 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   };
 
   // Board pan: any press that is not on a live app control, a drag handle, or the
-  // canvas chrome. Space or the middle button pans even over a phone.
+  // canvas chrome. Space or the middle button pans even over an app surface.
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (presenting) return;
     const target = event.target as HTMLElement;
-    const onInteractive = Boolean(target.closest('.mp-phone, .mp-canvas-controls, .mp-flybar, .mp-frame-heading, .mp-frame-footnote'));
+    const onInteractive = Boolean(target.closest('.mp-phone, .mp-presentbar, .mp-canvas-controls, .mp-flybar, .mp-frame-heading, .mp-frame-footnote'));
     const canPan = event.button === 1 || spaceHeld.current || (event.button === 0 && !onInteractive);
     if (!canPan) return;
     event.preventDefault();
@@ -672,7 +686,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
                 const p = frameAt(key);
                 const z = dragged === key ? 10 : 1 + Math.max(0, zOrder.indexOf(key));
                 return (
-                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-focused={focus === key} data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} data-presented={presenting && presentKey === key} style={{ left: p.x, top: p.y, width: W, zIndex: presenting && presentKey === key ? 5 : z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
+                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-focused={focus === key} data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} data-presented={presenting && presentKey === key} aria-hidden={presenting && presentKey !== key} style={{ left: p.x, top: p.y, width: W, zIndex: presenting && presentKey === key ? 5 : z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
                     <header className="mp-frame-heading" role="button" tabIndex={0} aria-label={`Move ${label} frame`} title="Drag or use arrow keys to move this screen frame" onFocus={() => setZOrder((old) => bringToFront(old, key))} onKeyDown={onHandleKeyDown(key)} onPointerDown={onHandlePointerDown(key)} onDoubleClick={onFrameDoubleClick(key)}><Grip /><span>{String(i + 1).padStart(2, '0')}</span><strong>{label}</strong><code>{key === 'index' ? '/' : `/${key}`}</code></header>
                     <div id={frameId(key)} className="mp-phone" style={{ width: W, height: H }}>
                       <PrototypeNavigationContext.Provider value={(action, href) => record(key, action, href, 'live')}><DesigningProvider screenKey={key} column="current"><Component /></DesigningProvider></PrototypeNavigationContext.Provider>
@@ -708,7 +722,13 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
             </div>
 
             {presenting && presentKey && presentedLabel && (
-              <PresentBar label={presentedLabel} position={presentedPos} scheme={scheme} />
+              <PresentBar
+                label={presentedLabel}
+                position={presentedPos}
+                scheme={scheme}
+                onToggleScheme={() => setScheme(scheme === 'light' ? 'dark' : 'light')}
+                onExit={() => setPresenting(false)}
+              />
             )}
           </div>
         </div>
