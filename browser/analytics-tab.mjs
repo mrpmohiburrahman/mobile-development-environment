@@ -1,12 +1,6 @@
-// Browser check for the studio Analytics tab.
-//
-// Builds two static exports, serves them, and drives the normal /ide entry.
-// One export has a test token. The other has none. Neither may call Mixpanel.
-//
-// Usage: node browser/analytics-tab.mjs
-
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -19,19 +13,17 @@ const PROJECT = 'https://mixpanel.com/project/4074212';
 const BOUNDARY = 'Analytics come from the app on a device or simulator. This studio sends nothing.';
 const NOT_CONFIGURED = 'Mixpanel: not configured';
 const HOSTS = ['api.mixpanel.com', 'api-eu.mixpanel.com', 'api-in.mixpanel.com'];
+const NETWORK_OBSERVATION_MS = 1000;
 
 function exportWeb(dir, extraEnv) {
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  // Metro stores transforms in os.tmpdir()/metro-cache and does not key that cache
-  // by EXPO_PUBLIC_* values. A shared cache inlines the first export's empty token
-  // into the second. A private TMPDIR keeps the two builds apart, including from
-  // any other export running on this machine.
   const tmp = `${dir}.tmp`;
   mkdirSync(tmp, { recursive: true });
   const env = {
     ...process.env,
+    CI: '1',
     EXPO_NO_TELEMETRY: '1',
+    EXPO_NO_DOTENV: '1',
+    EXPO_BASE_URL: '',
     EXPO_PUBLIC_TOKEN_SERVER: 'http://127.0.0.1:9',
     TMPDIR: tmp,
     ...extraEnv,
@@ -72,49 +64,54 @@ function listen(dir) {
   });
 }
 
-async function openStudio(browser, url) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const hits = [];
-  const note = (requestUrl) => {
-    const host = new URL(requestUrl).hostname;
-    if (host === 'mixpanel.com' || host.endsWith('.mixpanel.com')) hits.push(requestUrl);
-  };
-  await page.route(
-    (requestUrl) => HOSTS.includes(requestUrl.hostname) || requestUrl.hostname.endsWith('.mixpanel.com'),
-    async (route) => {
-      note(route.request().url());
-      await route.abort();
-    },
-  );
-  page.on('request', (request) => note(request.url()));
-  await page.goto(`${url}/ide`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('tab', { name: 'analytics' }).click();
-  await page.locator('#analytics-note').waitFor();
-  return { page, hits };
-}
-
-async function appActions(page) {
+async function studioActions(page) {
   const today = page.locator('#screen-index');
-  await today.waitFor();
-  // Week marks are also ✓ and are not controls. The completion control is the
-  // pressable whose only text is the check, in the same card as the habit name.
-  const toggle = today.locator('[tabindex="0"]').filter({ hasText: /^✓$/ }).first();
-  if ((await toggle.count()) < 1) throw new Error('Today has no completed habit to toggle');
-  await toggle.click();
-  await page.waitForFunction(() => {
-    const root = document.querySelector('#screen-index');
-    const name = [...(root?.querySelectorAll('*') ?? [])].find(
-      (el) => el.childNodes.length === 1 && el.textContent === 'Morning run',
-    );
-    const card = name?.closest('[tabindex="0"]');
-    return card != null && !card.textContent.includes('✓');
+  const habit = today.locator('[tabindex="0"]').filter({
+    has: page.getByText('Morning run', { exact: true }),
   });
+  const checkmark = habit.getByText('✓', { exact: true });
+  await checkmark.waitFor();
+  await habit.locator('[tabindex="0"]').click();
+  await checkmark.waitFor({ state: 'detached' });
   await today.getByText('Morning run', { exact: true }).click();
-  await page.getByRole('tab', { name: 'state' }).click();
-  await page.getByText('→ /habit').first().waitFor();
-  await today.getByText('Habits', { exact: true }).click();
+  await page.locator('#screen-habit').getByText('Morning run', { exact: true }).waitFor();
+  await page.getByRole('tab', { name: 'state', exact: true }).click();
+  await page.getByText('route index → /habit', { exact: true }).waitFor();
+  await today.getByText('MR', { exact: true }).click();
+  await page.getByText('route index → /profile', { exact: true }).waitFor();
   await page.locator('#screen-profile').getByText('Sign out', { exact: true }).click();
   await today.getByText('Sign in', { exact: true }).waitFor();
+  await page.getByText('route profile → /login', { exact: true }).waitFor();
+  await today.getByText('Sign in', { exact: true }).click();
+  await today.getByText('Morning run', { exact: true }).waitFor();
+}
+
+async function appActions(page, url) {
+  const text = (value) => page.getByText(value, { exact: true })
+    .and(page.locator(':not([aria-hidden="true"] *)'))
+    .filter({ visible: true });
+  await page.goto(`${url}/`, { waitUntil: 'domcontentloaded' });
+  await text('Morning run').click();
+  await page.waitForURL(`${url}/habit`);
+  await text('Logged for today · tap to undo').click();
+  await text('Mark done today').waitFor();
+  await text('Back').click();
+  await page.waitForURL(`${url}/`);
+  await text('Habits').click();
+  await page.waitForURL(`${url}/habits`);
+  await text('All habits').waitFor();
+  await text('Profile').click();
+  await page.waitForURL(`${url}/profile`);
+  await text('Sign out').click();
+  await page.waitForURL(`${url}/login`);
+  await text('Sign in').click();
+  await page.waitForURL(`${url}/`);
+  await text('Morning run').waitFor();
+}
+
+async function assertNoRequests(page, hits) {
+  await page.waitForTimeout(NETWORK_OBSERVATION_MS);
+  assert.equal(hits.length, 0, 'The browser sent analytics requests.');
 }
 
 async function assertBoundary(page, { configured }) {
@@ -137,40 +134,79 @@ async function assertBoundary(page, { configured }) {
 }
 
 async function check(browser, url, configured) {
-  const { page, hits } = await openStudio(browser, url);
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    reducedMotion: 'reduce',
+    serviceWorkers: 'block',
+  });
+  const hits = [];
+  const errors = [];
+  const isMixpanel = (host) => host === 'mixpanel.com' || host.endsWith('.mixpanel.com');
+  context.on('request', (request) => {
+    const host = new URL(request.url()).hostname;
+    if (isMixpanel(host)) hits.push(host);
+  });
+  context.on('page', (page) => page.on('pageerror', () => errors.push(true)));
   try {
+    await context.route((requestUrl) => isMixpanel(requestUrl.hostname), (route) => route.abort());
+    const probe = await context.newPage();
+    await probe.evaluate(async (hosts) => {
+      await Promise.all(hosts.map((host) => fetch(`https://${host}/track`).catch(() => {})));
+    }, HOSTS);
+    assert.deepEqual([...new Set(hits)].sort(), [...HOSTS].sort(), 'The interception check failed.');
+    await probe.close();
+    hits.length = 0;
+
+    const page = await context.newPage();
+    page.setDefaultTimeout(15000);
+    await page.goto(`${url}/ide`, { waitUntil: 'domcontentloaded' });
     await assertBoundary(page, { configured });
-    await appActions(page);
+    await studioActions(page);
     await assertBoundary(page, { configured });
-    if (hits.length !== 0) {
-      throw new Error(`Mixpanel requests: ${hits.length}`);
-    }
+    await assertNoRequests(page, hits);
+    await appActions(page, url);
+    await assertNoRequests(page, hits);
+    await page.goto(`${url}/ide`, { waitUntil: 'domcontentloaded' });
+    await assertBoundary(page, { configured });
+    await assertNoRequests(page, hits);
+    assert.equal(errors.length, 0, 'The browser reported JavaScript errors.');
+    console.log(`Analytics check passed: ${configured ? 'configured' : 'absent'} token, studio and app actions, zero requests.`);
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 
-const absentDir = resolve(OUT, 'absent');
-const configuredDir = resolve(OUT, 'configured');
-
-await exportWeb(absentDir, {
-  EXPO_PUBLIC_MIXPANEL_TOKEN: '',
-  EXPO_PUBLIC_MIXPANEL_REGION: '',
-});
-await exportWeb(configuredDir, {
-  EXPO_PUBLIC_MIXPANEL_TOKEN: TOKEN,
-  EXPO_PUBLIC_MIXPANEL_REGION: 'us',
-});
-
-const absent = await listen(absentDir);
-const configured = await listen(configuredDir);
-const browser = await chromium.launch();
+mkdirSync(OUT, { recursive: true });
+const runDir = mkdtempSync(resolve(OUT, 'analytics-'));
+const servers = [];
+let browser;
 try {
+  const absentDir = resolve(runDir, 'absent');
+  const configuredDir = resolve(runDir, 'configured');
+  await exportWeb(absentDir, {
+    EXPO_PUBLIC_MIXPANEL_TOKEN: '',
+    EXPO_PUBLIC_MIXPANEL_REGION: '',
+  });
+  await exportWeb(configuredDir, {
+    EXPO_PUBLIC_MIXPANEL_TOKEN: TOKEN,
+    EXPO_PUBLIC_MIXPANEL_REGION: 'us',
+  });
+  const absent = await listen(absentDir);
+  servers.push(absent.server);
+  const configured = await listen(configuredDir);
+  servers.push(configured.server);
+  browser = await chromium.launch();
   await check(browser, absent.url, false);
   await check(browser, configured.url, true);
-  console.log('analytics tab: studio sent nothing; absent token is visible; actions still work');
 } finally {
-  await browser.close();
-  absent.server.close();
-  configured.server.close();
+  try {
+    await Promise.all([
+      browser?.close(),
+      ...servers.map((server) => new Promise((done, reject) => {
+        server.close((error) => error ? reject(error) : done());
+      })),
+    ]);
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
 }

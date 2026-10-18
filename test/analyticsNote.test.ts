@@ -1,7 +1,3 @@
-// The studio Analytics tab copy. The tab is a note, not a sender.
-//
-// Run: node --experimental-strip-types --test test/analyticsNote.test.ts
-
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
