@@ -148,3 +148,41 @@
 @media (prefers-reduced-motion: reduce) {
   .mp-world[data-flying='true'] { transition: none; }
 }
+
+.mp-presentbar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px #23332e1a;
+}
+.mp-present-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mp-present-label strong { font-size: 13px; font-weight: 600; letter-spacing: -.1px; white-space: nowrap; }
+.mp-present-label > span { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.mp-presentbar button { font-size: 11px; }
+
+.mp.mp-presenting .mp-frame:not([data-presented='true']) { visibility: hidden; }
+.mp.mp-presenting .mp-connectors { visibility: hidden; }
+.mp.mp-presenting .mp-header,
+.mp.mp-presenting .mp-toolbar,
+.mp.mp-presenting .mp-inspector,
+.mp.mp-presenting .mp-canvas-controls,
+.mp.mp-presenting .mp-flybar,
+.mp.mp-presenting .mp-status,
+.mp.mp-presenting .mp-footer { display: none; }
+.mp.mp-presenting .mp-frame-heading,
+.mp.mp-presenting .mp-frame-footnote { visibility: hidden; }
+.mp.mp-presenting .mp-frame[data-presented='true'] .mp-phone {
+  box-shadow: 0 18px 48px #23332e22;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mp.mp-presenting .mp-world[data-flying='true'] { transition: none; }
+}

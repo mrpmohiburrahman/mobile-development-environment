@@ -20,6 +20,10 @@ import {
   type Connection,
   type Point,
 } from './midpointBoard';
+import { PresentBar } from './PresentBar';
+import { useScreenState } from './screen.state';
+import { presentKeyboardDecision, presentScale, presentTransform, declaredPosition } from './presentMode';
+import { useEditorStore } from '../ds/editorState';
 import { useHabits } from '../store/habits';
 import { TokensFrom } from '../ds/store';
 import './midpointPrototype.css';
@@ -109,6 +113,10 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   reports?: ReactNode;
 }) {
   const spine = useSpine();
+  const setPresentedKey = useScreenState((s) => s.setPresentedKey);
+  const scheme = useEditorStore((s) => s.scheme);
+  const setScheme = useEditorStore((s) => s.setScheme);
+  const [presenting, setPresenting] = useState(false);
   const [includeTabs, setIncludeTabs] = useState(false);
   const [sessionStart, setSessionStart] = useState(spine.seq);
   const [active, setActive] = useState<Activity | null>(null);
@@ -220,6 +228,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   const flyTo = useCallback((key: string | null, targetK?: number) => {
     const el = viewport.current;
     if (!el) return;
+    if (key !== null) setPresentedKey(key);
     if (flyTimer.current) clearTimeout(flyTimer.current);
     if (key === null) {
       setFitMode(true);
@@ -234,7 +243,51 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     }
     flyTimer.current = setTimeout(() => setFlying(false), 480);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitView, positions, rowY]);
+  }, [fitView, positions, rowY, setPresentedKey]);
+
+  const presentKey = presenting && useScreenState.getState().presentedKey
+    ? (useScreenState.getState().presentedKey as string)
+    : null;
+  const presentedLabel = presentKey ? labelOf(presentKey) : null;
+  const presentedPos = presentKey ? declaredPosition(screens.map((s) => s.key), presentKey) : null;
+  const presentK = presentScale(vpSize.h);
+  const presentFrame = presentKey ? frameAt(presentKey) : null;
+  const presentView = presentKey && presentFrame
+    ? presentTransform(presentFrame.x, presentFrame.y + CAPTION, W, H, vpSize.w, vpSize.h, presentK)
+    : null;
+
+  useEffect(() => {
+    if (!presenting) return;
+    const decide = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editable = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+      const control = Boolean(target?.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]'));
+      const decision = presentKeyboardDecision({ key: event.key, targetEditable: editable, targetControl: control, presenting });
+      if (!decision) return;
+      if (decision.action === 'exit') setPresenting(false);
+      else if (decision.action === 'step') {
+        const key = useScreenState.getState().presentedKey;
+        if (!key) return;
+        const keys = screens.map((s) => s.key);
+        const i = keys.indexOf(key);
+        const next = keys[Math.min(keys.length - 1, Math.max(0, i + decision.delta))];
+        if (next) setPresentedKey(next);
+      } else if (decision.action === 'toggleScheme') {
+        const cur = useEditorStore.getState().scheme;
+        setScheme(cur === 'light' ? 'dark' : 'light');
+      }
+      if ('prevent' in decision && decision.prevent) event.preventDefault();
+      if (decision.action === 'step' || decision.action === 'toggleScheme') event.preventDefault();
+    };
+    window.addEventListener('keydown', decide);
+    return () => window.removeEventListener('keydown', decide);
+  }, [presenting, setPresentedKey, setScheme]);
+
+  const enterPresent = () => {
+    const key = useScreenState.getState().presentedKey ?? screens[0]?.key;
+    if (key) setPresentedKey(key);
+    setPresenting(true);
+  };
 
   useEffect(() => {
     if (navigationTarget === null) return;
@@ -322,6 +375,19 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, [zoomAt, fitView, vpSize]);
+
+  useEffect(() => {
+    if (presenting) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const editable = Boolean(target?.closest('input, textarea, select, [contenteditable="true"]'));
+      const control = Boolean(target?.closest('button, a, summary, [role="button"], [role="tab"], [role="switch"]'));
+      const decision = presentKeyboardDecision({ key: event.key, targetEditable: editable, targetControl: control, presenting: false });
+      if (decision?.action === 'enter') { event.preventDefault(); enterPresent(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const record = (from: string, action: PrototypeAction, href: string | undefined, mode: 'live' | 'preview') => {
     setActive(null);
@@ -531,13 +597,19 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
   }, [dragged, view, rowY]);
 
   return (
-    <main className="mp" aria-label="Studio board" data-layout-ready={positionsReady && Boolean(view)}>
+    <main
+      className={presenting ? 'mp mp-presenting' : 'mp'}
+      aria-label="Studio board"
+      data-layout-ready={positionsReady && Boolean(view)}
+      data-presenting={presenting}
+      data-presented={presentKey ?? undefined}
+      data-present-scale={presenting ? presentK : undefined}>
       <header className="mp-header">
         <div className="mp-brand"><span className="mp-brand-icon">S</span><span>Streak Studio</span></div>
         <span className="mp-header-divider" />
         <div className="mp-heading"><h1>Navigation board</h1><span>Real app screens · drag frames · pan and zoom</span></div>
         {badge}
-        <div className="mp-header-actions"><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
+        <div className="mp-header-actions"><button type="button" aria-label={`Present ${presentedLabel ?? 'board'}`} aria-pressed={presenting} onClick={() => (presenting ? setPresenting(false) : enterPresent())} title="Present the camera screen (P)">Present</button><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
       </header>
 
       <section className="mp-toolbar" aria-label="Board controls">
@@ -561,7 +633,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}>
-            {view && <div className="mp-world" data-flying={flying} style={{ width: bounds.maxX, height: bounds.maxY, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+            {view && <div className="mp-world" data-flying={flying} style={presenting && presentView ? { width: bounds.maxX, height: bounds.maxY, transform: `translate(${presentView.x}px, ${presentView.y}px) scale(${presentView.k})` } : { width: bounds.maxX, height: bounds.maxY, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
               <svg className="mp-connectors" width={bounds.maxX} height={bounds.maxY} role="img" aria-label="Navigation connections between real app screens">
                 <defs>
                   {['rest', 'used', 'active'].map((kind) => <marker key={kind} id={`mp-arrow-${kind}`} markerUnits="userSpaceOnUse" markerWidth={12} markerHeight={12} refX={10.5} refY={6} orient="auto"><path d="M 1.5 2.5 L 10.5 6 L 1.5 9.5" fill="none" stroke={`var(--${kind === 'active' ? 'accent' : kind === 'used' ? 'line-used' : 'line'})`} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></marker>)}
@@ -592,7 +664,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
                 const p = frameAt(key);
                 const z = dragged === key ? 10 : 1 + Math.max(0, zOrder.indexOf(key));
                 return (
-                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-focused={focus === key} data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} style={{ left: p.x, top: p.y, width: W, zIndex: z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
+                  <section key={key} id={`mp-frame-${key}`} className="mp-frame" data-focused={focus === key} data-active={Boolean(last && (last.from === key || last.to === key))} data-dragging={dragged === key} data-presented={presenting && presentKey === key} style={{ left: p.x, top: p.y, width: W, zIndex: presenting && presentKey === key ? 5 : z, '--readable-size': `${Math.min(12 / k, 40)}px` } as CSSProperties}>
                     <header className="mp-frame-heading" role="button" tabIndex={0} aria-label={`Move ${label} frame`} title="Drag or use arrow keys to move this screen frame" onFocus={() => setZOrder((old) => bringToFront(old, key))} onKeyDown={onHandleKeyDown(key)} onPointerDown={onHandlePointerDown(key)} onDoubleClick={onFrameDoubleClick(key)}><Grip /><span>{String(i + 1).padStart(2, '0')}</span><strong>{label}</strong><code>{key === 'index' ? '/' : `/${key}`}</code></header>
                     <div id={frameId(key)} className="mp-phone" style={{ width: W, height: H }}>
                       <PrototypeNavigationContext.Provider value={(action, href) => record(key, action, href, 'live')}><DesigningProvider screenKey={key} column="current"><Component /></DesigningProvider></PrototypeNavigationContext.Provider>
@@ -626,6 +698,16 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
             <div className="mp-flybar" role="group" aria-label="Fly to screen">
               {screens.map(({ key, label }) => <button type="button" key={key} onClick={() => flyTo(key)}>{label}</button>)}
             </div>
+
+            {presenting && presentKey && presentedLabel && (
+              <PresentBar
+                label={presentedLabel}
+                position={presentedPos}
+                scheme={scheme}
+                onToggleScheme={() => setScheme(scheme === 'light' ? 'dark' : 'light')}
+                onExit={() => setPresenting(false)}
+              />
+            )}
           </div>
         </div>
 
