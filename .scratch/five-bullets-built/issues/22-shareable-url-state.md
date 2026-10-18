@@ -24,23 +24,55 @@ A link reproduces a studio view on the deployed static build with no server. The
 
 ## Answer
 
-`mobile/src/ide/urlState.ts` is the pure layer. The payload is versioned JSON (`v`, `p`, `s`, `c`, `o` — and nothing else, so app data, frame positions, camera, scroll, active tab, and baseline state are excluded by construction), deflate-compressed through `CompressionStream`, base64url-encoded into `#s=…`. Decoding takes the receiving build's screen registry and committed `tokens.json` as parameters, enforces a 16KB payload cap and a 64KB decompressed cap (the inflate reader cancels past the limit), and never throws: malformed payload, unsupported version, unknown screen, unknown token path, invalid value, and unrecognized scheme or present flag each degrade to the valid part plus a banner sentence. Overrides validate against the same `tokenRules.json` rules as the editor, and prototype-polluting paths fall out through the own-leaf check.
+`mobile/src/ide/urlState.ts` is the pure layer. It does not use `window`.
 
-`mobile/src/ide/useShareLink.ts` is the browser glue. On board-ready it decodes the hash once, applies the valid part (overrides land on the editor store directly — a link reproduces a view, it never writes to the codebase), and normalizes the URL to what applied. Every later change to the four shared fields re-encodes through a 400ms-debounced `history.replaceState`; a fully default view clears the fragment. Copy link encodes at click time, ahead of the pending debounce, so the clipboard carries the latest edits, then reports `Copied` or `Copy failed` as a label swap. A browser without the compression streams gets an explicit banner and no URL tracking. The banner floats over the canvas, stays visible in Present mode, and dismisses.
+- The payload is JSON with the keys `v`, `p`, `s`, `c`, and `o`. It has no other keys.
+- The link does not carry app data, frame positions, camera, scroll, active tab, or baseline state.
+- `CompressionStream` compresses the JSON with deflate. The result goes into `#s=` as base64url.
+- The decoder receives the screen registry and the committed `tokens.json` of the receiving build.
+- The decoder refuses a payload longer than 16 KB. It stops inflation at 64 KB.
+- The decoder does not throw. Each invalid part adds one banner sentence. The valid parts apply.
+- Overrides must pass the `tokenRules.json` rules. Each override path must name a leaf in the committed tokens.
+- The banner counts the rejected overrides, for example "2 of 3".
+
+`mobile/src/ide/useShareLink.ts` connects the layer to the browser.
+
+- The hook decodes the hash one time, after the board is ready.
+- `applySharedOverrides` puts the overrides into the editor store. The token server gets no write.
+- The hook then writes the applied state back into the URL.
+- A change to a shared field writes the URL again after 400 ms, through `history.replaceState`.
+- A default view removes the fragment.
+- Copy link encodes the view when the user clicks. It does not wait for the 400 ms timer.
+- The button shows `Copied` or `Copy failed`.
+- A browser without compression streams gets a banner. The URL does not change, and the board disables Copy link.
+
+The board clears the screen key when the camera leaves the screen. Fit, Reset layout, the `0` key, pan, and zoom clear it. Present entry then uses the nearest frame.
+
+The banner shows over the canvas. It also shows in Present mode. The user can dismiss it.
 
 ## Verification
 
 Run on 2026-10-18 in this worktree.
 
-- `npm test`: 454 tests passed. `test/urlState.test.ts` adds 18. They cover round trips, the exact wire key set, malformed/oversized/bomb payloads, unsupported versions, unknown screens, partial overrides, prototype pollution, and missing compression APIs.
+- `npm test`: 456 tests passed. `test/urlState.test.ts` has 20 tests.
 - `npx tsc --noEmit` in `mobile/`: passed.
-- `npm run lint` in `mobile/`: passed. The first run reported a stale-cache `import/no-unresolved` on `analytics/track.ts` from before `npm install` in this worktree; clearing `mobile/.expo/cache/eslint/` resolved it.
+- `npm run lint` in `mobile/`: passed.
 - `npm run export:web`: passed. It verifies 14 pages and 4 assets.
-- `npm run test:share`: passed on the static export. Round trip (present flag, screen, dark scheme, token override visible on the presented screen, URL re-encodes to the same state), Copy link freshness inside the debounce window with clipboard assertion, partial payload (unknown screen + unknown token warn, valid parts apply, banner dismisses), malformed payload, and version mismatch. The links are built with Node's zlib, so agreement proves the wire format.
-- `npm run test:present` and `npm run test:board`: passed. The board check now strips the hash before its no-navigation URL assertion, because the hash legitimately tracks the camera.
-- `npm run test:analytics`: passed. No analytics requests in any shared-link flow.
+- `npm run test:share`: passed on the static export. The script makes its links with Node zlib. The test cases follow.
+  - A full link applies in a fresh context. The URL encodes the same state again.
+  - Copy link runs at once after a token edit. The clipboard holds the edit.
+  - A copied link opens in a fresh context and shows the same state.
+  - Fit removes the screen key from the URL.
+  - A partial link shows a banner. The camera goes to the first screen.
+  - Malformed text and malformed compression show a banner.
+  - A wrong version shows a banner.
+  - A browser without compression streams shows a banner. The board disables Copy link.
+- `npm run test:present` and `npm run test:board`: passed.
+- `npm run test:analytics`: not run in the review fix. It runs two more builds, and the owner did not approve that memory use. This change does not touch analytics code.
 - `scripts/guard.sh`: passed. No guarded file changed.
 
 ## Notes
 
-The debounce interval is a fixed 400ms constant and Copy confirmation is a button-label swap — the two open questions from ticket 06, resolved at implementation.
+The debounce interval is a fixed 400 ms constant. Copy link shows its result on the button. These answers close the two open questions from ticket 06.
+
+The banner text follows ASD-STE100. It does not use the ticket 06 sentences word for word.
