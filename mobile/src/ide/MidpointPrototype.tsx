@@ -22,6 +22,7 @@ import {
 } from './midpointBoard';
 import { PresentBar } from './PresentBar';
 import { useScreenState } from './screen.state';
+import { useShareLink } from './useShareLink';
 import { presentKeyboardDecision, presentScale, presentTransform, declaredPosition, stepDeclaredScreen, nearestScreenToPoint } from './presentMode';
 import { useEditorStore } from '../ds/editorState';
 import { useHabits } from '../store/habits';
@@ -246,6 +247,10 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
     flyTimer.current = setTimeout(() => setFlying(false), 480);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitView, positions, rowY, setPresentedKey]);
+
+  // Shareable URL state: the hash mirrors present flag, screen, scheme, and
+  // token overrides; an incoming link applies once the board layout is real.
+  const share = useShareLink({ ready: positionsReady && vpSize.w > 0, focusScreen: flyTo });
 
   const presentKey = presenting ? presentedKey : null;
   const presentedLabel = presentKey ? labelOf(presentKey) : null;
@@ -631,7 +636,7 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
         <span className="mp-header-divider" />
         <div className="mp-heading"><h1>Navigation board</h1><span>Real app screens · drag frames · pan and zoom</span></div>
         {badge}
-        <div className="mp-header-actions"><button type="button" aria-label={`Present ${presentedLabel ?? 'board'}`} aria-pressed={presenting} onClick={() => (presenting ? setPresenting(false) : enterPresent())} title="Present the camera screen (P)">Present</button><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
+        <div className="mp-header-actions"><button type="button" onClick={() => void share.copyLink()} title="Copy a link that reproduces this view">{share.copyState === 'copied' ? 'Copied' : share.copyState === 'failed' ? 'Copy failed' : 'Copy link'}</button><button type="button" aria-label={`Present ${presentedLabel ?? 'board'}`} aria-pressed={presenting} onClick={() => (presenting ? setPresenting(false) : enterPresent())} title="Present the camera screen (P)">Present</button><button type="button" onClick={reset}>Reset session</button><button type="button" onClick={resetLayout} disabled={!layoutDirty} title="Restore frame positions and the camera overview">Reset layout</button><button type="button" aria-pressed={inspector} onClick={() => setInspector(!inspector)}>Route inspector {inspector ? '−' : '+'}</button></div>
       </header>
 
       <section className="mp-toolbar" aria-label="Board controls">
@@ -646,6 +651,14 @@ export function StudioBoard({ baseline = null, focus = null, badge, reports }: {
 
       <div className="mp-workspace">
         <div className="mp-canvas-shell">
+          {share.warnings.length > 0 && (
+            <div className="mp-sharebanner" role="alert">
+              <div className="mp-sharebanner-text">
+                {share.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+              </div>
+              <button type="button" onClick={share.dismissWarnings}>Dismiss</button>
+            </div>
+          )}
           <div
             className="mp-viewport"
             ref={viewport}
