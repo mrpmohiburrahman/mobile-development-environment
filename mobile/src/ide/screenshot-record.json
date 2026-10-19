@@ -1,0 +1,150 @@
+{
+  "sourceCommit": "cce6d9c73a29a90927c44d0e1ffb67ec1056d962",
+  "environment": "linux/arm64",
+  "image": "mcr.microsoft.com/playwright:v1.58.0-noble",
+  "playwrightVersion": "1.58.0",
+  "viewport": {
+    "width": 480,
+    "height": 900
+  },
+  "deviceScaleFactor": 2,
+  "png": {
+    "width": 780,
+    "height": 1640
+  },
+  "css": {
+    "width": 390,
+    "height": 820
+  },
+  "totalBytes": 1270796,
+  "cases": [
+    {
+      "id": "habits-light-populated",
+      "screen": "habits",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/habits-light-populated.png",
+      "bytes": 107949
+    },
+    {
+      "id": "habits-dark-populated",
+      "screen": "habits",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/habits-dark-populated.png",
+      "bytes": 103088
+    },
+    {
+      "id": "index-light-populated",
+      "screen": "index",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/index-light-populated.png",
+      "bytes": 128217
+    },
+    {
+      "id": "index-dark-populated",
+      "screen": "index",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/index-dark-populated.png",
+      "bytes": 122452
+    },
+    {
+      "id": "profile-light-populated",
+      "screen": "profile",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/profile-light-populated.png",
+      "bytes": 88609
+    },
+    {
+      "id": "profile-dark-populated",
+      "screen": "profile",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/profile-dark-populated.png",
+      "bytes": 86425
+    },
+    {
+      "id": "stats-light-populated",
+      "screen": "stats",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/stats-light-populated.png",
+      "bytes": 90898
+    },
+    {
+      "id": "stats-dark-populated",
+      "screen": "stats",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/stats-dark-populated.png",
+      "bytes": 88852
+    },
+    {
+      "id": "habit-light-populated",
+      "screen": "habit",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/habit-light-populated.png",
+      "bytes": 72268
+    },
+    {
+      "id": "habit-dark-populated",
+      "screen": "habit",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/habit-dark-populated.png",
+      "bytes": 69310
+    },
+    {
+      "id": "login-light-populated",
+      "screen": "login",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/login-light-populated.png",
+      "bytes": 40156
+    },
+    {
+      "id": "login-dark-populated",
+      "screen": "login",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/login-dark-populated.png",
+      "bytes": 40069
+    },
+    {
+      "id": "settings-light-populated",
+      "screen": "settings",
+      "scheme": "light",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/settings-light-populated.png",
+      "bytes": 96984
+    },
+    {
+      "id": "settings-dark-populated",
+      "screen": "settings",
+      "scheme": "dark",
+      "state": "populated",
+      "baseline": "e2e/__screenshots__/settings-dark-populated.png",
+      "bytes": 94195
+    },
+    {
+      "id": "habit-light-empty",
+      "screen": "habit",
+      "scheme": "light",
+      "state": "empty",
+      "baseline": "e2e/__screenshots__/habit-light-empty.png",
+      "bytes": 20523
+    },
+    {
+      "id": "habit-dark-empty",
+      "screen": "habit",
+      "scheme": "dark",
+      "state": "empty",
+      "baseline": "e2e/__screenshots__/habit-dark-empty.png",
+      "bytes": 20801
+    }
+  ]
+}

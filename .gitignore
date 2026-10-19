@@ -19,3 +19,7 @@ browser/out/
 # An earlier draft of the studio brief. The map calls it superseded and says it
 # stays on disk, so it is ignored rather than deleted or committed.
 EXTEND-STUDIO.md
+
+# Screenshot suite output. CI uploads it as an artifact.
+test-results/
+playwright-report/
