@@ -6,6 +6,7 @@ import { StatePanel } from '../ide/StatePanel';
 import { RoutePanel } from '../ide/RoutePanel';
 import { TokenPanel } from '../ide/TokenPanel';
 import { AnalyticsPanel } from '../ide/AnalyticsPanel';
+import { RegressionPanel } from '../ide/RegressionPanel';
 import { BaselinePanel, BaselineToggle } from '../ide/BaselinePanel';
 import { Drifted, useScreenDrift } from '../ide/ScreenDriftPanel';
 import { attachSpine } from '../ide/spineStore';
@@ -13,7 +14,7 @@ import { useScreenState } from '../ide/screen.state';
 import { CHROME, chipStyle } from '../ide/chrome';
 import { Label } from '../ide/Label';
 
-type Tab = 'tokens' | 'state' | 'routes' | 'baseline' | 'analytics';
+type Tab = 'tokens' | 'state' | 'routes' | 'baseline' | 'analytics' | 'regression';
 
 /**
  * The tabs, in the order they are drawn.
@@ -23,7 +24,7 @@ type Tab = 'tokens' | 'state' | 'routes' | 'baseline' | 'analytics';
  * cascade over the same union, so adding a tab meant editing two unrelated
  * expressions and a missing case in either was silent.
  */
-const TABS: Tab[] = ['tokens', 'state', 'routes', 'baseline', 'analytics'];
+const TABS: Tab[] = ['tokens', 'state', 'routes', 'baseline', 'analytics', 'regression'];
 
 /**
  * The studio. This is a route in the mobile app, not a separate project — which
@@ -78,6 +79,7 @@ export default function IDE() {
     state: <StatePanel />,
     routes: <RoutePanel host={rootRef} focus={focus} onFocusChange={setFocus} />,
     analytics: <AnalyticsPanel />,
+    regression: <RegressionPanel />,
     baseline: (
       <View style={{ gap: 18 }}>
         {/* Two levels of the same comparison: which tokens differ, then

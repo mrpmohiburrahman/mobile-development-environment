@@ -171,6 +171,10 @@ export type ScreenshotValidation = { ok: boolean; errors: string[] };
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
+export function isFullCommit(value: unknown): value is string {
+  return typeof value === 'string' && COMMIT_PATTERN.test(value);
+}
+
 export function validateScreenshotRecord(
   record: unknown,
   matrix: readonly ScreenshotCase[],
@@ -181,7 +185,7 @@ export function validateScreenshotRecord(
   }
   const errors: string[] = [];
   const r = record as Partial<ScreenshotRecord>;
-  if (typeof r.sourceCommit !== 'string' || !COMMIT_PATTERN.test(r.sourceCommit)) {
+  if (!isFullCommit(r.sourceCommit)) {
     errors.push('screenshot record has no full source commit');
   }
   if (r.playwrightVersion !== opts.playwrightVersion) {
