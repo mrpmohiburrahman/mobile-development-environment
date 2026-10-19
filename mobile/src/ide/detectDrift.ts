@@ -67,6 +67,7 @@ export const TOKEN_PROPERTIES = [
   'lineHeight',
   'letterSpacing',
   'fontWeight',
+  'fontFamily',
   // elevation.*
   'boxShadow',
 ] as const;
@@ -190,6 +191,9 @@ export function normalizeValue(property: string, value: string): string {
   const trimmed = String(value ?? '').trim();
   if (trimmed === '') return '';
   if (property === 'boxShadow') return normalizeShadowValue(trimmed);
+  if (property === 'fontFamily') {
+    return trimmed.split(',').map((family) => family.trim().replace(/^(['"])(.*)\1$/, '$2').toLowerCase()).join(',');
+  }
 
   // getComputedStyle resolves 400 to `normal` and 700 to `bold`, while the token
   // file holds "400" and "700". Mapped back to the numeric form rather than
@@ -293,6 +297,7 @@ const PROPERTY_FAMILY: Record<TokenProperty, string> = {
   lineHeight: 'type',
   letterSpacing: 'type',
   fontWeight: 'type',
+  fontFamily: 'type',
   boxShadow: 'elevation',
 };
 

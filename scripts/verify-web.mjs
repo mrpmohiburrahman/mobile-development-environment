@@ -12,6 +12,28 @@ export async function verifyWebExport(root, basePath = '') {
   }
   const pages = (await readdir(absoluteRoot, { recursive: true })).filter((file) => file.endsWith('.html'));
   const assets = new Set();
+  const origin = 'https://export.invalid';
+  const visitAsset = async (reference, parentUrl) => {
+    if (reference.startsWith('#')) return;
+    const url = new URL(reference, parentUrl);
+    if (url.origin !== origin) return;
+    if (!url.pathname.startsWith(`${prefix}/`)) {
+      throw new Error(`Asset has no base path: ${reference}`);
+    }
+    const asset = resolve(absoluteRoot, decodeURIComponent(url.pathname.slice(prefix.length + 1)));
+    const path = relative(absoluteRoot, asset);
+    if (path === '..' || path.startsWith(`..${sep}`) || !(await stat(asset)).isFile()) {
+      throw new Error(`Missing export asset: ${reference}`);
+    }
+    if (assets.has(asset)) return;
+    assets.add(asset);
+    if (asset.endsWith('.css')) {
+      const css = await readFile(asset, 'utf8');
+      for (const match of css.matchAll(/url\(\s*(['"]?)([^'"\s)]+)\1\s*\)/g)) {
+        await visitAsset(match[2], url);
+      }
+    }
+  };
   for (const page of pages) {
     const html = await readFile(resolve(absoluteRoot, page), 'utf8');
     if (/<!--\$(?:!|\?)-->/.test(html)) {
@@ -20,20 +42,9 @@ export async function verifyWebExport(root, basePath = '') {
     if (page === 'ide.html' && !html.includes('id="screen-login"')) {
       throw new Error('The studio export has no screen frames.');
     }
-    const origin = 'https://export.invalid';
     const pageUrl = `${origin}${prefix}/${page.split(sep).join('/')}`;
     for (const match of html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"[^>]*>/g)) {
-      const url = new URL(match[1], pageUrl);
-      if (url.origin !== origin) continue;
-      if (!url.pathname.startsWith(`${prefix}/`)) {
-        throw new Error(`Asset has no base path: ${match[1]}`);
-      }
-      const asset = resolve(absoluteRoot, decodeURIComponent(url.pathname.slice(prefix.length + 1)));
-      const path = relative(absoluteRoot, asset);
-      if (path === '..' || path.startsWith(`..${sep}`) || !(await stat(asset)).isFile()) {
-        throw new Error(`Missing export asset: ${match[1]}`);
-      }
-      assets.add(asset);
+      await visitAsset(match[1], pageUrl);
     }
   }
   return { pages: pages.length, assets: assets.size };

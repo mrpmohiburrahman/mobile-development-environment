@@ -144,6 +144,12 @@ function validateType(path: string, value: TokenValue): Validation {
   const key = path.split('.').at(-1);
   const n = rules.number;
 
+  if (path === 'type.family') {
+    return typeof value === 'string' && rules.fontFamily.allowed.includes(value)
+      ? ok
+      : fail(`Font family must be one of: ${rules.fontFamily.allowed.join(', ')}.`);
+  }
+
   switch (key) {
     case 'size':
       return inRange(value, n.typeSize.min, n.typeSize.max)

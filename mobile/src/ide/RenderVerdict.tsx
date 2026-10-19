@@ -1,37 +1,29 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { useTokens } from '../ds/store';
 import {
   fontVerdictCopy,
   judgeCandidates,
-  parseFontStack,
   typeVerdictCopy,
   verifyTypeTokens,
   type FontCandidate,
   type ObservedType,
   type TypeRoleToken,
 } from './renderFidelity';
-import { observeTypeStyles, probeFontCandidates } from './renderFidelity.dom';
+import {
+  loadBundledFontWeights,
+  observeFontStack,
+  observeTypeStyles,
+  probeFontCandidates,
+} from './renderFidelity.dom';
 import { resolveFrames } from './boardFrames';
 import { screens } from './screens';
 import { CHROME, TONE } from './chrome';
 import { Label } from './Label';
 
-/**
- * The CSS custom property the whole app's display type resolves through.
- *
- * Read off the document rather than parsed out of `global.css`: the question is
- * what the browser actually applied, and the browser is the only authority on
- * that. A value hard-coded here would be a second copy that drifts.
- */
-function readDisplayStack(): string[] {
-  if (Platform.OS !== 'web' || typeof getComputedStyle !== 'function') return [];
-  const root = getComputedStyle(document.documentElement);
-  return parseFontStack(root.getPropertyValue('--font-display'));
-}
-
 export type RenderVerdict = {
   candidates: FontCandidate[];
+  failedWeights: number[];
   observed: ObservedType[] | null;
   typeTokens: Record<string, TypeRoleToken>;
   measured: boolean;
@@ -66,27 +58,33 @@ export function useRenderVerdict(host: RefObject<View | null>): RenderVerdict | 
     const node = host.current as unknown as HTMLElement | null;
     if (!node?.querySelector) return;
 
-    const id = requestAnimationFrame(() => {
-      const resolved = resolveFrames(node, screens.map((s) => s.key));
-
-      const stack = readDisplayStack();
-      // Every candidate, multi-word ones included. An earlier version filtered out
-      // families containing a space, on the theory that quoting them was fiddly —
-      // and quietly stopped probing `Spline Sans`, which is the family that is
-      // actually missing. Quoting is handled in the reader; the filter was the bug.
-      setVerdict({
-        candidates: judgeCandidates(stack, probeFontCandidates(stack)),
-        // `null` when no frame could be read at all, which the report renders as
-        // *not measured*. Zero frames is not "the tokens reached every screen".
-        observed: observeTypeStyles(resolved.frames),
-        typeTokens: JSON.parse(typeJson) as RenderVerdict['typeTokens'],
-        measured: resolved.found > 0,
-        framesRead: resolved.found,
-        framesMissing: resolved.missing.length,
+    let cancelled = false;
+    let id = 0;
+    const measure = (failedWeights: number[]) => {
+      if (cancelled) return;
+      id = requestAnimationFrame(() => {
+        const resolved = resolveFrames(node, screens.map((s) => s.key));
+        const stack = observeFontStack(resolved.frames);
+        setVerdict({
+          candidates: judgeCandidates(stack, probeFontCandidates(stack)),
+          failedWeights,
+          observed: observeTypeStyles(resolved.frames),
+          typeTokens: Object.fromEntries(
+            Object.entries(JSON.parse(typeJson)).filter(([name]) => name !== 'family'),
+          ) as RenderVerdict['typeTokens'],
+          measured: resolved.found > 0,
+          framesRead: resolved.found,
+          framesMissing: resolved.missing.length,
+        });
       });
-    });
+    };
 
-    return () => cancelAnimationFrame(id);
+    void loadBundledFontWeights().then(measure);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
   }, [host, typeJson]);
 
   return verdict;
@@ -120,7 +118,7 @@ export function RenderVerdictBadge({ host }: { host: RefObject<View | null> }) {
     );
   }
 
-  const font = fontVerdictCopy(verdict.candidates);
+  const font = fontVerdictCopy(verdict.candidates, verdict.failedWeights);
   const type = typeVerdictCopy(
     verdict.observed ? verifyTypeTokens(verdict.typeTokens, verdict.observed) : null,
     verdict.measured,

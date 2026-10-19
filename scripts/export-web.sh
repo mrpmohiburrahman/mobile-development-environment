@@ -33,5 +33,6 @@ if grep -R -q -F "$WRITER_URL" dist/_expo; then
   echo "export-web: the bundle still holds the writer URL $WRITER_URL." >&2
   exit 1
 fi
+node scripts/prepare-web-fonts.mjs dist
 node scripts/verify-web.mjs dist
 echo "read-only export  →  dist/"

@@ -1,4 +1,4 @@
-import { REFERENCES, type CandidateProbe, type ObservedType } from './renderFidelity.ts';
+import { REFERENCES, parseFontStack, type CandidateProbe, type ObservedType } from './renderFidelity.ts';
 import type { BoardFrame } from './boardFrames.ts';
 
 /**
@@ -16,6 +16,26 @@ import type { BoardFrame } from './boardFrames.ts';
  * dependency of any kind — which is the constraint that keeps this work from
  * turning into the screenshot suite it declines to build.
  */
+
+export const BUNDLED_FONT_FAMILY = 'Spline Sans';
+export const BUNDLED_FONT_WEIGHTS = [400, 600, 700] as const;
+
+export async function loadBundledFontWeights(): Promise<number[]> {
+  if (typeof document === 'undefined' || !document.fonts?.load) return [...BUNDLED_FONT_WEIGHTS];
+  try {
+    const results = await Promise.allSettled(
+      BUNDLED_FONT_WEIGHTS.map((weight) => document.fonts.load(`${weight} 16px "${BUNDLED_FONT_FAMILY}"`)),
+    );
+    await document.fonts.ready;
+    return results.flatMap((result, index) =>
+      result.status === 'rejected' || result.value.length === 0 || result.value.some((face) => face.status !== 'loaded')
+        ? [BUNDLED_FONT_WEIGHTS[index]]
+        : [],
+    );
+  } catch {
+    return [...BUNDLED_FONT_WEIGHTS];
+  }
+}
 
 /**
  * The string every candidate is measured with.
@@ -153,6 +173,15 @@ export function observeTypeStyles(frames: BoardFrame[]): ObservedType[] | null {
     }
   }
   return observed;
+}
+
+export function observeFontStack(frames: BoardFrame[]): string[] {
+  if (typeof getComputedStyle !== 'function') return [];
+  for (const { element } of frames) {
+    const text = [element, ...element.querySelectorAll('*')].find(holdsText);
+    if (text) return parseFontStack(getComputedStyle(text).fontFamily);
+  }
+  return [];
 }
 
 const holdsText = (node: Element): boolean => {

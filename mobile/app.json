@@ -26,6 +26,42 @@
     "plugins": [
       "expo-router",
       [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Spline Sans",
+                "fontDefinitions": [
+                  {
+                    "path": "./public/fonts/spline-sans/SplineSans_400Regular.ttf",
+                    "weight": 400,
+                    "style": "normal"
+                  },
+                  {
+                    "path": "./public/fonts/spline-sans/SplineSans_600SemiBold.ttf",
+                    "weight": 600,
+                    "style": "normal"
+                  },
+                  {
+                    "path": "./public/fonts/spline-sans/SplineSans_700Bold.ttf",
+                    "weight": 700,
+                    "style": "normal"
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./public/fonts/spline-sans/SplineSans_400Regular.ttf",
+              "./public/fonts/spline-sans/SplineSans_600SemiBold.ttf",
+              "./public/fonts/spline-sans/SplineSans_700Bold.ttf"
+            ]
+          }
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#FBFAF7",

@@ -262,7 +262,7 @@ test('a named family winning is the headline, because the repo never shipped it'
   assert.match(copy.label, /renders in Inter/);
   assert.match(copy.label, /does not ship/);
   assert.notEqual(copy.tone, 'ok', 'a face the commit does not ship is still machine-dependent');
-  assert.match(copy.detail, /no font face is declared/i);
+  assert.match(copy.detail, /not part of the font bundle/i);
   assert.match(copy.detail, /Spline Sans is absent|1 of 6 named families/);
 });
 
@@ -329,6 +329,23 @@ const rendered = (over: Partial<Record<string, string>> = {}) => ({
   letterSpacing: '0px',
   fontWeight: '400',
   ...over,
+});
+
+test('a failed font weight prevents a successful bundled-font verdict', () => {
+  const candidates = judgeCandidates(parseFontStack(DISPLAY), [found('Spline Sans')]);
+  const copy = fontVerdictCopy(candidates, [600, 700]);
+  assert.equal(copy.tone, 'degraded');
+  assert.match(copy.label, /600, 700/);
+  assert.match(copy.detail, /failed to load/);
+});
+
+test('a measured bundled family does not claim native font verification', () => {
+  const copy = fontVerdictCopy(judgeCandidates(parseFontStack(DISPLAY), [found('Spline Sans')]));
+  assert.equal(copy.tone, 'ok');
+  assert.equal(copy.answered, true);
+  assert.match(copy.label, /bundled Spline Sans/);
+  assert.doesNotMatch(copy.label, /does not ship/);
+  assert.match(copy.detail, /does not prove native/);
 });
 
 test('a role whose values all agree is verified, with the sample size beside it', () => {

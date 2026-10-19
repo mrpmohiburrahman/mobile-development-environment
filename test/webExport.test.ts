@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verifyWebExport } from '../scripts/verify-web.mjs';
+import { prepareWebFonts } from '../scripts/prepare-web-fonts.mjs';
 
 function fixture(prefix = '') {
   const root = mkdtempSync(join(tmpdir(), 'export-check-'));
@@ -30,6 +31,45 @@ test('the export check verifies a Pages subpath', async () => {
   try {
     assert.deepEqual(await verifyWebExport(root, '/repository'), { pages: 2, assets: 2 });
     assert.deepEqual(await verifyWebExport(root, '/repository/'), { pages: 2, assets: 2 });
+  } finally {
+    cleanup();
+  }
+});
+
+for (const prefix of ['', '/repository']) {
+  test(`font URLs resolve after export preparation with base ${prefix || '/'}`, async () => {
+    const { root, cleanup } = fixture(prefix);
+    try {
+      mkdirSync(join(root, 'fonts/spline-sans'), { recursive: true });
+      writeFileSync(join(root, 'fonts/spline-sans/regular.ttf'), 'font fixture');
+      writeFileSync(join(root, '_expo/app.css'), '@font-face{src:url("/fonts/spline-sans/regular.ttf")}');
+      await prepareWebFonts(root);
+      assert.match(readFileSync(join(root, '_expo/app.css'), 'utf8'), /url\("\.\.\/fonts\/spline-sans\/regular.ttf"\)/);
+      assert.deepEqual(await verifyWebExport(root, prefix), { pages: 2, assets: 3 });
+      const prepared = readFileSync(join(root, '_expo/app.css'), 'utf8');
+      await prepareWebFonts(root);
+      assert.equal(readFileSync(join(root, '_expo/app.css'), 'utf8'), prepared);
+    } finally {
+      cleanup();
+    }
+  });
+}
+
+test('the export check rejects broken relative font URLs', async () => {
+  const { root, cleanup } = fixture();
+  try {
+    writeFileSync(join(root, '_expo/app.css'), '@font-face{src:url("../public/fonts/regular.ttf")}');
+    await assert.rejects(verifyWebExport(root), /regular\.ttf/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('the export check rejects font URLs outside the Pages prefix', async () => {
+  const { root, cleanup } = fixture('/repository');
+  try {
+    writeFileSync(join(root, '_expo/app.css'), '@font-face{src:url("/fonts/spline-sans/regular.ttf")}');
+    await assert.rejects(verifyWebExport(root, '/repository'), /Asset has no base path/);
   } finally {
     cleanup();
   }

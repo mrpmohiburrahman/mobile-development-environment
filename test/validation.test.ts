@@ -47,7 +47,8 @@ for (const family of ['space', 'radius'] as const) {
   for (const name of Object.keys(tokens[family])) realPaths.push(`${family}.${name}`);
 }
 for (const [role, spec] of Object.entries(tokens.type)) {
-  for (const key of Object.keys(spec)) realPaths.push(`type.${role}.${key}`);
+  if (typeof spec === 'string') realPaths.push(`type.${role}`);
+  else for (const key of Object.keys(spec)) realPaths.push(`type.${role}.${key}`);
 }
 for (const name of Object.keys(tokens.elevation)) realPaths.push(`elevation.${name}`);
 
@@ -142,6 +143,15 @@ test('zero space is legal; zero radius is legal', () => {
 // ---------------------------------------------------------------------------
 // type — and the weight that is a string
 // ---------------------------------------------------------------------------
+
+test('the client and server accept only bundled font families', () => {
+  for (const validate of [validateTokenValue, serverValidate]) {
+    assert.equal(validate('type.family', 'Spline Sans').ok, true);
+    for (const value of ['Inter', 'System', 'Spline Sans, sans-serif', '', 400, null, undefined]) {
+      assert.equal(validate('type.family', value as any).ok, false);
+    }
+  }
+});
 
 test('type weight is validated as a string, because that is what it is', () => {
   // The brief listed `type.*.weight` alongside the numeric fields. It is not
@@ -273,6 +283,12 @@ const CASES: Array<[string, string | number]> = [
   ['radius.pill', 999],
   ['radius.sm', 10],
   ['radius.md', 0],
+  ['type.family', 'Spline Sans'],
+  ['type.family', 'Inter'],
+  ['type.family', 'System'],
+  ['type.family', ''],
+  ['type.family', 400],
+  ['type.title.family', 'Spline Sans'],
   ['type.display.size', 32],
   ['type.display.weight', '800'],
   ['type.display.letterSpacing', -0.5],

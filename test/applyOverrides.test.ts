@@ -93,12 +93,13 @@ test('both setPath implementations agree on every real token path', () => {
     }
   }
 
-  for (const role of Object.keys(tokens.type)) {
-    const path = `type.${role}.size`;
+  for (const [role, spec] of Object.entries(tokens.type)) {
+    const path = typeof spec === 'string' ? `type.${role}` : `type.${role}.size`;
+    const value = typeof spec === 'string' ? 'Spline Sans' : 99;
     const a: any = structuredClone(tokens);
     const b: any = structuredClone(tokens);
-    setPath(a, path, 99);
-    serverSetPath(b, path, 99);
+    setPath(a, path, value);
+    serverSetPath(b, path, value);
     assert.deepEqual(a, b, `disagreement at ${path}`);
   }
 });

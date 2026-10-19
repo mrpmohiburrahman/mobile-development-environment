@@ -231,7 +231,7 @@ test('a group carries its own differences, not just a count', () => {
 });
 
 test('readPath reads a nested leaf and reports absence as undefined', () => {
-  assert.equal(at(tokens, 'type.display.weight'), '800');
+  assert.equal(at(tokens, 'type.display.weight'), '700');
   assert.equal(at(tokens, 'type.caption.weight'), '400');
   assert.equal(at(tokens, 'elevation.sm'), tokens.elevation.sm);
   assert.equal(at(tokens, 'color.light.nope'), undefined);

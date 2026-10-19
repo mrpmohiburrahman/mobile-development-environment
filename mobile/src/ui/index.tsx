@@ -41,6 +41,7 @@ export function Text({
     <RNText
       style={[
         {
+          fontFamily: t.type.family,
           fontSize: spec.size,
           fontWeight: spec.weight as any,
           lineHeight: spec.lineHeight,
@@ -226,6 +227,7 @@ export function TabBar({ active }: { active: string }) {
               </View>
               <RNText
                 style={{
+                  fontFamily: t.type.family,
                   fontSize: 11,
                   fontWeight: '600',
                   color: on ? t.color.accent : t.color.textMuted,
@@ -269,7 +271,7 @@ export function BackBar({ to = '/' }: { to?: string }) {
         },
         pressed && { opacity: 0.5 },
       ]}>
-      <RNText style={{ fontSize: 22, lineHeight: 22, color: t.color.textMuted }}>‹</RNText>
+      <RNText style={{ fontFamily: t.type.family, fontSize: 22, lineHeight: 22, color: t.color.textMuted }}>‹</RNText>
       <Text role="label" color="textMuted">
         Back
       </Text>
@@ -351,6 +353,7 @@ export function Button({
       ]}>
       <RNText
         style={{
+          fontFamily: t.type.family,
           fontSize: t.type.label.size,
           fontWeight: '600',
           lineHeight: t.type.label.lineHeight,
@@ -390,6 +393,7 @@ export function Chip({
       }}>
       <RNText
         style={{
+          fontFamily: t.type.family,
           fontSize: t.type.caption.size,
           fontWeight: '600',
           lineHeight: t.type.caption.lineHeight,

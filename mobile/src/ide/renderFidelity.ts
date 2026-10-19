@@ -9,29 +9,6 @@
  * building a pixel-diff suite or refusing one on taste, and it turns a judgement
  * into a number that can change when a web font ships.
  *
- * ## What the number says today
- *
- * The display stack names two families ahead of the system fallbacks: `Spline
- * Sans`, then `Inter`. The plan predicted both would be absent, and the measurement
- * found it was half right — **`Spline Sans` is absent and `Inter` is present**. No
- * `@font-face` is declared anywhere in the app, the font package is imported by
- * nothing, and the type tokens carry no `fontFamily` at all, so the `Inter` that
- * wins came off this machine rather than out of the commit. (It is not in any font
- * directory either: it is a file inside an unrelated application bundle, which is
- * why three independent measurements had to agree before the answer was believed.)
- *
- * That is a **stronger** finding than the one predicted, not a weaker one, and the
- * correction is the point of measuring rather than assuming: a machine-dependent
- * face the repository does not ship still means the stack resolves to one face
- * here, a different one on a machine without it, and a third on Linux. Three
- * machines, three rasters, one committed tree.
- *
- * That is worse than a font-loading race, which `document.fonts.ready` solves. It
- * is font *availability*: a per-machine property, already settled, that waiting
- * cannot move. It is also why the answer is a measurement rather than a
- * screenshot suite — every unique thing a pixel diff would catch is
- * font-dependent, and this app has no fixed typeface.
- *
  * ## How a family is judged
  *
  * By width. Render a test string in the candidate and in each of two
@@ -64,6 +41,7 @@
 
 import { normalizeValue } from './detectDrift.ts';
 import type { Tone } from '../ds/reachability.ts';
+import rules from '../ds/tokenRules.json' with { type: 'json' };
 
 /**
  * The two families every candidate is measured against.
@@ -247,7 +225,7 @@ export type FontCopy = {
  * because "I found nothing" and "I did not look" are different claims and the
  * difference between them is the difference between a tool and a rumour.
  */
-export function fontVerdictCopy(candidates: FontCandidate[]): FontCopy {
+export function fontVerdictCopy(candidates: FontCandidate[], failedWeights: number[] = []): FontCopy {
   const named = candidates.filter((c) => !isKeyword(c.family));
   const measured = candidates.filter((c) => c.fate === 'present' || c.fate === 'fell-through');
   const winner = candidates.find((c) => c.winner);
@@ -266,11 +244,6 @@ export function fontVerdictCopy(candidates: FontCandidate[]): FontCopy {
   const missing = named.filter((c) => c.fate === 'fell-through').map((c) => c.family);
   const unknown = named.filter((c) => c.fate === 'unknown' || c.fate === 'unmeasured').map((c) => c.family);
 
-  // A **named** family winning is the finding, not the absence of one. Nothing in
-  // this repo ships it, declares it, or names it in `tokens.json` — so whichever
-  // face it turns out to be, it came from the machine. That is the whole claim:
-  // one committed tree, a different raster per machine, and no way to tell from
-  // the repository which one you are looking at.
   if (winner && !isKeyword(winner.family)) {
     // Named families sitting *ahead* of the winner that the studio could not
     // resolve. A cascade draws the first family it has, so an unresolved earlier
@@ -286,6 +259,21 @@ export function fontVerdictCopy(candidates: FontCandidate[]): FontCopy {
         ? ` ${shadowed.join(' and ')} sit${shadowed.length === 1 ? 's' : ''} ahead of it in the stack and could not be resolved, so this is the first family the studio could judge rather than a proof of which one drew the glyphs.`
         : '';
 
+    if (rules.fontFamily.allowed.includes(winner.family)) {
+      return {
+        tone: shadowed.length > 0 || failedWeights.length > 0 ? 'degraded' : 'ok',
+        answered: true,
+        measured: measured.length,
+        total: candidates.length,
+        label: failedWeights.length > 0
+          ? `bundled font weights unavailable: ${failedWeights.join(', ')}`
+          : `renders in bundled ${winner.family}${shadowed.length > 0 ? ' (provisional)' : ''}`,
+        detail: failedWeights.length > 0
+          ? `Font weights ${failedWeights.join(', ')} failed to load. This check does not prove native font loading.`
+          : `The browser measured the bundled family. This check does not prove native font loading or identical rasterization.${provisional}`,
+      };
+    }
+
     return {
       tone: 'degraded',
       answered: true,
@@ -296,8 +284,8 @@ export function fontVerdictCopy(candidates: FontCandidate[]): FontCopy {
           ? `renders in ${winner.family}, which this repo does not ship (provisional)`
           : `renders in ${winner.family}, which this repo does not ship`,
       detail:
-        `no font face is declared anywhere in the app, the type tokens carry no font family at all, and ${winner.family} is still what wins — so the face came from whatever this machine happens to have installed, not from the commit. ` +
-        `${missing.length} of ${named.length} named families in the stack are absent here. A machine without ${winner.family} renders something else, and Linux renders a third.` +
+        `${winner.family} is not part of the font bundle. The browser measured a fallback family rather than the bundled face. ` +
+        `${missing.length} of ${named.length} named families in the stack are absent here.` +
         provisional,
     };
   }

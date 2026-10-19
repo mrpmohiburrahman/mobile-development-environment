@@ -4,6 +4,7 @@ import { useTokenStore, useTokens, type Scheme } from '../ds/store';
 import { CHROME, CHROME_RADIUS, TONE } from './chrome';
 import { Label } from './Label';
 import { ShadowInput } from './ShadowInput';
+import rules from '../ds/tokenRules.json';
 
 /**
  * Editors are raw DOM inputs. The IDE only ever runs on web, and the platform
@@ -142,6 +143,7 @@ const Line = ({
 
 export function TokenPanel() {
   const tokens = useTokens();
+  const { family, ...typeRoles } = tokens.type;
   const {
     setToken,
     scheme,
@@ -276,7 +278,24 @@ export function TokenPanel() {
       </Section>
 
       <Section title="Type scale">
-        {Object.entries(tokens.type).map(([name, spec]) => (
+        <Line
+          name="family"
+          value={family}
+          valueWidth={84}
+          edited={edited('type.family')}
+          onUndo={() => revertToken('type.family')}
+          control={createElement(
+            'select',
+            {
+              'aria-label': 'Font family',
+              value: family,
+              onChange: (event: any) => setToken('type.family', event.target.value),
+              style: { width: 96, color: CHROME.text, background: CHROME.panelSoft },
+            },
+            rules.fontFamily.allowed.map((name) => createElement('option', { key: name, value: name }, name)),
+          )}
+        />
+        {Object.entries(typeRoles).map(([name, spec]) => (
           <Line
             key={name}
             name={name}

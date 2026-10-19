@@ -21,6 +21,10 @@
     }
   },
 
+  "fontFamily": {
+    "allowed": ["Spline Sans"]
+  },
+
   "fontWeight": {
     "pattern": "^[1-9]00$",
     "patternNote": "A string, not a number: tokens.json holds \"800\", and type.*.weight was briefly mis-typed as numeric in the brief. Multiples of 100 from 100 to 900."

@@ -54,7 +54,7 @@ test('every compared property is one a token in tokens.json can move', () => {
     // radius.*
     'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius',
     // type.*
-    'fontSize', 'lineHeight', 'letterSpacing', 'fontWeight',
+    'fontSize', 'lineHeight', 'letterSpacing', 'fontWeight', 'fontFamily',
     // elevation.*
     'boxShadow',
   ]);
@@ -100,6 +100,20 @@ test('a length in px and the same length unitless compare equal', () => {
   // The browser resolves 0 to `0px` in some properties and `0` in others.
   assert.equal(normalizeValue('paddingTop', '16px'), normalizeValue('paddingTop', '16'));
   assert.equal(normalizeValue('gap', '0px'), normalizeValue('gap', '0'));
+});
+
+test('font family differences use the family token and ignore CSS quotes', () => {
+  const baseline = { type: { family: 'System' } };
+  const current = { type: { family: 'Spline Sans' } };
+  const found = compareStyles(
+    { fontFamily: '"Spline Sans"' },
+    { fontFamily: 'System' },
+    driftOf(current, baseline),
+  );
+  assert.equal(found.length, 1);
+  assert.equal(found[0].property, 'fontFamily');
+  assert.equal(found[0].token, 'type.family');
+  assert.deepEqual(compareStyles({ fontFamily: '"Spline Sans"' }, { fontFamily: 'Spline Sans' }, []), []);
 });
 
 test('a fractional length survives normalisation', () => {

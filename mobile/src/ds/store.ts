@@ -29,7 +29,7 @@ export const useTokenStore = useEditorStore;
 export type { Scheme };
 
 export type Tokens = typeof base;
-export type TypeRole = keyof Tokens['type'];
+export type TypeRole = Exclude<keyof Tokens['type'], 'family'>;
 
 /**
  * Which token tree everything below this provider renders from.
@@ -104,5 +104,5 @@ export function useTheme(): Theme {
 export function useType(role: TypeRole) {
   const { type } = useTheme();
   const t = type[role];
-  return { fontSize: t.size, fontWeight: t.weight as any, lineHeight: t.lineHeight };
+  return { fontFamily: type.family, fontSize: t.size, fontWeight: t.weight as any, lineHeight: t.lineHeight };
 }

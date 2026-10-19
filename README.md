@@ -130,11 +130,13 @@ The studio assumes the render on screen is the render that was designed. The hea
 
 It probes which family actually won the display font stack by rendering a test string in each candidate and in two known-different references, and comparing widths. Every candidate is named with its fate — present, fell through, or unmeasured — and an unanswerable one is never reported as fine. It then checks the `type.*` tokens against the computed styles of the text on the real screens, and reports how many screens and how many properties it compared.
 
-**The measured answer depends on the browser.** The font stack names `Spline Sans` and `Inter` before its system fallbacks. One local measurement found `Inter` but no `Spline Sans`. The GIF records a different font result. Neither result applies to every browser.
+The app includes Spline Sans weights 400, 600, and 700 from `@expo-google-fonts/spline-sans` version 0.4.2. The original font files and SIL OFL license are in `mobile/public/fonts/spline-sans/`.
 
-The app declares no font face. Nothing imports a font package. The type tokens carry no font family. The browser uses the fonts available on that machine, not a font supplied by this repository.
+Web uses weighted `@font-face` declarations. The export converts public font URLs to relative paths for root and subpath deployments. The `type.family` token selects Spline Sans through shared Text, tabs, Back, buttons, and chips. The client and server reject font families outside the bundled allow-list. The display weight is 700. Existing smoothing settings remain unchanged.
 
-The header reports its current measurement, including absent and unmeasured families. The GIFs and still record their capture sessions. They do not define a font baseline for the hosted build.
+The `expo-font` plugin includes the same files in native builds. Android defines the family with explicit weights. iOS reads the family from the font files. Run `npx expo run:ios` from `mobile/` to rebuild the native app after font changes. A Metro restart or Expo Go session does not apply the plugin. Check the rebuilt app before reporting native font verification.
+
+The header waits for the web fonts before it measures the browser render. This check does not prove native font loading or identical native rasterization. The older GIFs and still record their capture sessions, not a font baseline for the current build.
 
 ## The five ideas from the talk
 
@@ -150,7 +152,7 @@ Rafael Mendiola left five bullets on a slide at RNCK #14. Here is where each one
 
 **The analytics SDK is declined, for three stated reasons.** It is a runtime dependency in a repo whose server is Node-stdlib-only and whose test command is `node --test`. A project token would be committed, which breaks the deliberate credential-free clone. And it is orthogonal to a tool whose whole claim is that design changes land in the codebase as git diffs. What is kept is its *shape* — a chronological stream of events from the running app — and that is what the `state` tab already is.
 
-**Visual regression on web is declined on a precondition, not on principle.** The talk's author attached the idea to a confidence condition: *if I have a reasonable confidence that what is displayed here will be what's displayed on mobile*. The condition is checkable, and the header checks it. The answer is no, and the reason is fonts. Any visual regression that is font-independent must exclude geometry, because geometry is font-dependent through text wrapping; exclude geometry and it is not a visual regression at all. It is the style comparison the **baseline** tab already does, plus a node count. When a web font ships, the verdict line changes and the question becomes answerable again.
+**Visual regression on web has a bundled font prerequisite.** This app now includes that font. The header measures the browser render, but it does not compare screenshots. The **baseline** tab still compares computed styles between two token sets. Screenshot baselines and native font verification remain separate checks.
 
 **The blueprint is not a design tool, and not a record of what was agreed.** It is a development tool for editing tokens, and it has no memory beyond your session. On the deployed build your edits are yours alone and are written nowhere.
 
@@ -194,4 +196,4 @@ scripts/
 - The compare view draws 14 screens at once. It is opt-in, and it runs fine at `reactCompiler: true` — but it is a deliberate toggle, not the default.
 - The change log keeps its last 200 rows and says so when it drops any. It is not persisted: reloading the page clears it, because the deployed build is per-visitor and its state is too.
 - Board-local history resets on reload. Preview history stays separate from observed journeys. Reset session clears board history and evidence, not app state or the state log.
-- The render verdict describes this browser, on this machine. A machine with the named display font installed will print a different answer, which is the point.
+- The render verdict describes this browser. Bundled fonts remove reliance on an installed face, but web and native rasterization can differ.
