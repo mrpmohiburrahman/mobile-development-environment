@@ -14,6 +14,59 @@ on:
     branches: ["**"]
 
 jobs:
+  # Screenshot comparison in the pinned Playwright image (ADR 0002). The job
+  # runs on pull requests and on pushes to the default branch only. The runner
+  # is arm64 because the baselines come from linux/arm64. `npm run vr` serves
+  # the static export and compares. A skip fails here (VR_REQUIRE_COMPARE=1).
+  # The job never writes or commits baselines.
+  visual-regression:
+    if: github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.0-noble
+      options: --platform linux/arm64
+    env:
+      TZ: UTC
+      VR_IMAGE: mcr.microsoft.com/playwright:v1.58.0-noble
+      VR_REQUIRE_COMPARE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the app
+        working-directory: mobile
+        run: npm ci --ignore-scripts
+
+      - name: Install the root tools
+        run: npx --yes yarn@1.22.22 install --frozen-lockfile --ignore-scripts
+
+      - name: Export the static build
+        run: npm run export:web
+
+      - name: Serve and compare screenshots
+        run: npm run vr
+
+      - name: Record the outcome
+        if: always()
+        run: node vr/summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload the diff images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-diffs
+          path: |
+            test-results/playwright/**/*.png
+            test-results/vr/
+          if-no-files-found: ignore
+
   check:
     runs-on: ubuntu-latest
     steps:

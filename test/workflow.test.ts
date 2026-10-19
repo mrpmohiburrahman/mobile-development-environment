@@ -137,3 +137,33 @@ test('the guard script is executable and starts with a shebang', () => {
   const script = readFileSync(join(ROOT, 'scripts/guard.sh'), 'utf8');
   assert.match(script, /^#!\/usr\/bin\/env bash\n/);
 });
+const vrJob = workflow.slice(workflow.indexOf('  visual-regression:'), workflow.indexOf('\n  check:'));
+
+test('the screenshot job runs in the pinned image on an arm64 runner', () => {
+  const image = `mcr.microsoft.com/playwright:v${pkg.devDependencies.playwright}-noble`;
+  assert.ok(vrJob.length > 0, 'studio-guard.yml has no visual-regression job');
+  assert.match(vrJob, /runs-on:\s*ubuntu-24\.04-arm/);
+  assert.ok(vrJob.includes(`image: ${image}`), 'container image must match the installed Playwright version');
+  assert.ok(vrJob.includes(`VR_IMAGE: ${image}`), 'VR_IMAGE must match the installed Playwright version');
+  assert.match(vrJob, /options:\s*--platform linux\/arm64/);
+  assert.match(vrJob, /VR_REQUIRE_COMPARE:\s*"1"/);
+});
+
+test('the screenshot job runs on pull requests and default-branch pushes only', () => {
+  assert.match(
+    vrJob,
+    /if: github\.event_name == 'pull_request' \|\| github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)/,
+  );
+});
+
+test('the screenshot job exports, compares, records the outcome, and uploads evidence', () => {
+  const order = ['npm run export:web', 'npm run vr', 'node vr/summary.mjs'].map((step) => vrJob.indexOf(step));
+  assert.ok(order.every((index, i) => index > 0 && (i === 0 || index > order[i - 1])), 'steps out of order');
+  assert.ok(pkg.scripts.vr && pkg.scripts['vr:update'], 'package.json lacks vr scripts');
+  assert.match(vrJob, /if: always\(\)\s*\n\s*uses: actions\/upload-artifact@v4\s*\n\s*with:\s*\n\s*name: playwright-report/);
+  assert.match(vrJob, /if: failure\(\)\s*\n\s*uses: actions\/upload-artifact@v4\s*\n\s*with:\s*\n\s*name: screenshot-diffs/);
+});
+
+test('the screenshot job never updates or commits baselines', () => {
+  assert.doesNotMatch(vrJob, /vr:update|update-snapshots|git (add|commit|push)/);
+});
