@@ -91,6 +91,7 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 - [Bundled font](issues/14-bundled-font.md) — Spline Sans weights 400, 600, and 700 now serve app text through one family token. Tests, lint, typechecking, and root/subpath exports passed. Native face assertions passed on seven iOS screens with a temporary scene-lifecycle adapter. The ticket records the iOS 27 launch limitation.
 - [Capture mode](issues/17-capture-mode.md) — `?capture=1&screen=<key>&scheme=light|dark&state=populated|empty` renders one 390 by 820 app surface at scale 1 with committed tokens and no studio chrome. The fixture applies before the surface paints. Invalid queries, missing fonts, failed images, and disabled reduced motion show `#capture-error` and never set `data-screenshot-ready`. `npm run test:capture` passes on the static export.
+- [Regression tab](issues/21-regression-tab.md) — the studio imports the bundled screenshot record. The tab reads `Approved at <commit>` and lists each case with its scheme, state, and baseline path. A `null` record reads `No screenshot run on record` in amber. The tab shows no images and no links, and it does not fetch. `RenderVerdict` does not change. A newer HEAD does not fail the tab or CI.
 
 ## Not yet specified
 
@@ -142,7 +143,7 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 | 18 | [Present mode](issues/18-present-mode.md) | task | 13 (resolved) |
 | 19 | [Analytics tab](issues/19-analytics-tab.md) | task | 15 (resolved) |
 | 20 | [Screenshot suite and CI](issues/20-screenshot-suite-and-ci.md) | task | 16, 17 (resolved) |
-| 21 | [Regression tab](issues/21-regression-tab.md) | task | 20 |
+| 21 | [Regression tab](issues/21-regression-tab.md) | task | 20 (resolved) |
 | 22 | [Shareable URL state](issues/22-shareable-url-state.md) | task | 18 (resolved) |
 | 23 | [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) | task | 16, 19, 20, 21, 22 |
 
@@ -150,4 +151,4 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: 20.** 12, 13, 14, 15, 16, 17, 18, 19, and 22 are resolved. 20 has no unresolved dependency. 21 waits on 20. 23 waits on 20 and 21.
+**Frontier: 23.** 12 to 22 are resolved. 23 has no unresolved dependency.
