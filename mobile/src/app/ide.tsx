@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Blueprint } from '../ide/Blueprint';
+import { CaptureSurface, useCaptureOutcome } from '../ide/CaptureSurface';
 import { StatePanel } from '../ide/StatePanel';
 import { RoutePanel } from '../ide/RoutePanel';
 import { TokenPanel } from '../ide/TokenPanel';
@@ -55,6 +56,11 @@ export default function IDE() {
   // resubscribe rather than finding a stale flag and reporting "watching" over a
   // subscription that no longer exists.
   useEffect(() => attachSpine(), []);
+
+  const capture = useCaptureOutcome();
+  if (Platform.OS === 'web' && capture.kind !== 'inactive') {
+    return <CaptureSurface outcome={capture} />;
+  }
 
   if (Platform.OS !== 'web') {
     return (

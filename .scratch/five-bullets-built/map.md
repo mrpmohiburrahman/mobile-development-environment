@@ -89,6 +89,9 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 - [What the guard now guards](issues/09-the-new-guard.md) — two guarded edits (`_layout.tsx` calls `useAnalytics()`, `habit.tsx` fixes the UTC weekday) pass through a per-commit `Guard-Allow: <path> -- <reason>` trailer; `ui/index.tsx` stays a permanent exception and now also carries the font family. See ADR 0004.
 - [The visual-regression contract](issues/08-visual-regression-contract.md) — capture the app surface at DPR 2, derive the matrix from the screen registry plus empty Habit detail, enter Capture mode by a static-export query, update Linux baselines only through reviewed `vr:update`, use threshold 0, and show a bundled screenshot record in the Regression tab. A missing record is not a pass. See ADR 0002.
 
+- [Bundled font](issues/14-bundled-font.md) — Spline Sans weights 400, 600, and 700 now serve app text through one family token. Tests, lint, typechecking, and root/subpath exports passed. Native face assertions passed on seven iOS screens with a temporary scene-lifecycle adapter. The ticket records the iOS 27 launch limitation.
+- [Capture mode](issues/17-capture-mode.md) — `?capture=1&screen=<key>&scheme=light|dark&state=populated|empty` renders one 390 by 820 app surface at scale 1 with committed tokens and no studio chrome. The fixture applies before the surface paints. Invalid queries, missing fonts, failed images, and disabled reduced motion show `#capture-error` and never set `data-screenshot-ready`. `npm run test:capture` passes on the static export.
+
 ## Not yet specified
 
 - **Edge routing.** Ticket 05 resolves this with side-midpoint connections and detour lanes above the frames. Ticket 13 ships it at the normal studio entry and in the static export.
@@ -132,13 +135,13 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 | 11 | [Board edges implementation](issues/11-board-edges-implementation.md) | task | 05 (resolved) |
 | 12 | [Guard permission trailers](issues/12-guard-permission-trailers.md) | task | — (resolved) |
 | 13 | [Board in the normal studio](issues/13-board-in-the-normal-studio.md) | task | — (resolved) |
-| 14 | [Bundled font](issues/14-bundled-font.md) | task | — |
+| 14 | [Bundled font](issues/14-bundled-font.md) | task | — (resolved) |
 | 15 | [Analytics sender](issues/15-analytics-sender.md) | task | — (resolved) |
 | 16 | [Weekday fix and layout hook](issues/16-weekday-fix-and-layout-hook.md) | task | 12, 15 (resolved) |
-| 17 | [Capture mode](issues/17-capture-mode.md) | task | 13 (resolved), 14 |
+| 17 | [Capture mode](issues/17-capture-mode.md) | task | 13, 14 (resolved) |
 | 18 | [Present mode](issues/18-present-mode.md) | task | 13 (resolved) |
 | 19 | [Analytics tab](issues/19-analytics-tab.md) | task | 15 (resolved) |
-| 20 | [Screenshot suite and CI](issues/20-screenshot-suite-and-ci.md) | task | 16, 17 |
+| 20 | [Screenshot suite and CI](issues/20-screenshot-suite-and-ci.md) | task | 16, 17 (resolved) |
 | 21 | [Regression tab](issues/21-regression-tab.md) | task | 20 |
 | 22 | [Shareable URL state](issues/22-shareable-url-state.md) | task | 18 (resolved) |
 | 23 | [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) | task | 16, 19, 20, 21, 22 |
@@ -147,4 +150,4 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: 14.** 12, 13, 15, 16, 18, 19, and 22 are resolved. 17 waits on 14. 20 waits on 17. 21 waits on 20. 23 waits on 20, 21, and 22.
+**Frontier: 20.** 12, 13, 14, 15, 16, 17, 18, 19, and 22 are resolved. 20 has no unresolved dependency. 21 waits on 20. 23 waits on 20 and 21.
