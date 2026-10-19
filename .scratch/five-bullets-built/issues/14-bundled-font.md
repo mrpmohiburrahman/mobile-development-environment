@@ -90,12 +90,12 @@ The test restored Light mode and the original habit completion state.
 These checks cover the bundled font paths, not every app feature.
 Android runtime font verification did not run.
 
-### iOS 27 limitation
+### iOS 27 limitation (superseded by ADR 0005)
 
 The generated Expo app initially failed at launch because iOS 27 requires the scene lifecycle.
 A temporary scene delegate and scene manifest in ignored `mobile/ios/` files allowed font verification.
 This workaround changed app startup, not the bundled font files or text styles.
-The tracked production configuration does not include that workaround.
+ADR 0005 superseded this note: the tracked configuration now adopts the scene lifecycle via `expo-build-properties`.
 The result proves bundled font rendering after the startup workaround, not an unmodified iOS 27 launch.
 
 Verification cleanup removed the temporary scene adapter and font inspector from generated source.

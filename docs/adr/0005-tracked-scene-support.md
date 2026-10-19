@@ -2,9 +2,9 @@
 
 iOS 27 refuses to launch an app that does not adopt the scene lifecycle. The tracked `mobile/app.json` enables the `expo-build-properties` plugin with `ios.enableSceneSupport`. A cold prebuild then writes the scene manifest into the gitignored `mobile/ios/`. This replaces the temporary scene adapter of ticket 14, which lived in generated source only.
 
-## Reason
+**Reason**
 
-Ticket 14 kept the workaround out of the tracked configuration, so its native result proved the font after the workaround. The official plugin makes an unmodified cold clone launch on iOS 27, so the tracked configuration can carry it.
+Ticket 14 kept the workaround out of the tracked configuration. That proved the font only with the workaround. The official plugin makes an unmodified cold clone launch on iOS 27, so the tracked configuration can carry it.
 
 ## Alternatives
 

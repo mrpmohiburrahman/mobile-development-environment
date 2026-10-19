@@ -89,10 +89,10 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 - [What the guard now guards](issues/09-the-new-guard.md) — two guarded edits (`_layout.tsx` calls `useAnalytics()`, `habit.tsx` fixes the UTC weekday) pass through a per-commit `Guard-Allow: <path> -- <reason>` trailer; `ui/index.tsx` stays a permanent exception and now also carries the font family. See ADR 0004.
 - [The visual-regression contract](issues/08-visual-regression-contract.md) — capture the app surface at DPR 2, derive the matrix from the screen registry plus empty Habit detail, enter Capture mode by a static-export query, update Linux baselines only through reviewed `vr:update`, use threshold 0, and show a bundled screenshot record in the Regression tab. A missing record is not a pass. See ADR 0002.
 
-- [Bundled font](issues/14-bundled-font.md) — Spline Sans weights 400, 600, and 700 now serve app text through one family token. Tests, lint, typechecking, and root/subpath exports passed. Native face assertions passed on seven iOS screens with a temporary scene-lifecycle adapter. The ticket records the iOS 27 launch limitation.
+- [Bundled font](issues/14-bundled-font.md) — Spline Sans weights 400, 600, and 700 now serve app text through one family token. Tests, lint, typechecking, and root/subpath exports passed. Native face assertions passed on seven iOS screens with a temporary scene-lifecycle adapter. ADR 0005 superseded the iOS 27 note: the tracked config now adopts the scene lifecycle.
 - [Capture mode](issues/17-capture-mode.md) — `?capture=1&screen=<key>&scheme=light|dark&state=populated|empty` renders one 390 by 820 app surface at scale 1 with committed tokens and no studio chrome. The fixture applies before the surface paints. Invalid queries, missing fonts, failed images, and disabled reduced motion show `#capture-error` and never set `data-screenshot-ready`. `npm run test:capture` passes on the static export.
 - [Regression tab](issues/21-regression-tab.md) — the studio imports the bundled screenshot record. The tab reads `Approved at <commit>` and lists each case with its scheme, state, and baseline path. A `null` record reads `No screenshot run on record` in amber. The tab shows no images and no links, and it does not fetch. `RenderVerdict` does not change. A newer HEAD does not fail the tab or CI.
-- [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) — `expo-build-properties` gives the tracked iOS configuration the scene lifecycle, so a cold clone launches on iOS 27 (ADR 0005). The checks verified native launch, bundled fonts, scheme registration, and the Argent-driven interactive flow. Mixpanel Events-page arrival, the App Opened per-launch count, and toggle payload contents stay unverified, and the ticket names them so.
+- [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) — `expo-build-properties` gives the tracked iOS configuration the scene lifecycle, so a cold clone launches on iOS 27 (ADR 0005). The checks verified native launch and bundled fonts. Mixpanel Events-page arrival, the App Opened per-launch count, and toggle payload contents stay unverified. Status: blocked, ready-for-human.
 
 ## Not yet specified
 
@@ -152,4 +152,4 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: none.** 12 to 23 are resolved. The backlog is empty until the owner files the next ticket.
+**Frontier: ticket 23 remains blocked and is ready-for-human. Tickets 12–22 are resolved; 23 is blocked, not resolved.**

@@ -46,7 +46,7 @@ Drop the `/ide` and you get the plain mobile app at `http://localhost:8081` — 
 Every check a cold clone can run, in one list:
 
 ```bash
-npm test                 # 498 assertions, node:test, no framework
+npm test                 # node:test suite (assertion count is not pinned)
 npm run guard            # the app-tree guard, against origin/HEAD
 npm run export:web       # the read-only static export into dist/
 npm run test:board       # the board: routes, history, movement, camera, persistence
@@ -217,7 +217,7 @@ EXPO_PUBLIC_MIXPANEL_REGION=us   # or eu / in
 
 Expo inlines only literal `process.env.EXPO_PUBLIC_*` member expressions, so the sender reads both that way. With no token the app still works and the sender reports `not-configured`. The clone stays credential-free, and the public Pages build needs no Mixpanel secret.
 
-`accepted` means the ingestion host answered `status: 1`. That is an HTTP acceptance, **not** proof an event reached a report. Mixpanel drops some accepted events silently. Only the project's Events page proves arrival. Verification therefore runs the app in the iOS Simulator and reads the Events page. A request from a browser, from Node, or from the token server is not a substitute. It exercises no platform guard, no install identity, and no native UUID generator.
+`accepted` means the ingestion host answered `status: 1`. That is an HTTP acceptance, **not** proof an event reached a report. Mixpanel drops some accepted events silently. Only the project's Events page proves arrival. This environment has not verified Events-page arrival. A request from a browser, from Node, or from the token server is not a substitute. It exercises no platform guard, no install identity, and no native UUID generator.
 
 The studio's **analytics** tab is a note, not a send log. It states the boundary, links to [the project](https://mixpanel.com/project/4074212), and reads `Mixpanel: not configured` when the web build has no token. It never prints the token, a log, or a dashboard. A configured web build still shows the caveat that a token there proves nothing about the native app.
 
@@ -235,7 +235,7 @@ Rafael Mendiola left five bullets on a slide at RNCK #14. Here is where each one
 | Visual regression on web | **Built.** A real screenshot suite with committed Linux baselines, and the measured verdict beside it. |
 | Blueprint for stakeholders | **Built.** Present mode, and a shareable URL that reproduces an exact view. |
 
-**The analytics SDK is declined, for three stated reasons, and the events are not.** An SDK is a runtime dependency in a repo whose server is Node-stdlib-only and whose test command is `node --test`. A committed project token would break the deliberate credential-free clone. A vendor SDK is orthogonal to a tool whose whole claim is that design changes land as git diffs. All three still hold, so the sender is 200 lines of `fetch` behind adapters and the token stays in a gitignored file. The studio on web sends nothing at all. Events leaving the running app are real on a device and a simulator, which is what the talk asked for. The `state` tab still shows the studio's own spine, not a send log.
+**The analytics SDK is declined, for three stated reasons, and the events are not.** An SDK is a runtime dependency in a repo whose server is Node-stdlib-only and whose test command is `node --test`. A committed project token would break the deliberate credential-free clone. A vendor SDK is orthogonal to a tool whose whole claim is that design changes land as git diffs. All three still hold, so the sender is a small `fetch` module behind adapters and the token stays in a gitignored file. The studio on web sends nothing at all. Events leaving the running app are real on a device and a simulator, which is what the talk asked for. The `state` tab still shows the studio's own spine, not a send log.
 
 **Visual regression on web needed a bundled font, and now it has one.** The app ships Spline Sans 400, 600, and 700. A captured pixel no longer depends on the face the host happens to hold. Two checks sit side by side and neither subsumes the other. The **baseline** tab attributes a change to a named token. The screenshot suite catches any pixel that moved, including one no token explains. See [the screenshot contract](#the-screenshot-contract).
 
@@ -289,7 +289,7 @@ mobile/
   src/ds/           tokens.json, the store, the server client, validation
   src/ide/          blueprint, board, token / baseline / state / route /
                     analytics / regression panels, capture mode, present mode,
-                    URL state, the spine and the regression panels
+                    URL state and the spine
   src/analytics/    the sender, the route observer, the hook, the adapters
   public/fonts/     Spline Sans 400 / 600 / 700 and the OFL license
 token-server/       the writer, Node stdlib only
@@ -318,10 +318,10 @@ docs/adr/           the five decisions these boundaries come from
 - The render verdict describes this browser. Bundled fonts remove reliance on an installed face, but web and native rasterization can differ.
 - Spline Sans has no 800 weight, so the `display` token renders at 700. The family allow-list rejects anything not bundled.
 - Analytics has no retry and no offline queue. An `unsent` event is gone, and the spec rules a durable queue out of scope. `accepted` is an HTTP answer, not a delivery.
-- Analytics has no native end-to-end proof in this clone. The Mixpanel token file is gitignored and absent, so no device event has reached the project. The web suite verifies the sender against a local stand-in. No Android runtime verification has run, and nothing here claims real users before an App Store release.
+- Analytics has no native end-to-end proof in this clone. The Mixpanel token file is gitignored and absent. Events-page arrival, the per-launch App Opened count, and toggle payload contents stay unverified, and outbound requests do not prove arrival. The web suite verifies the sender against a local stand-in. No Android runtime verification has run, and nothing here claims real users before an App Store release.
 - A habit toggled or a sign-out performed while the device shows `/ide` is suppressed. Those are the developer's presses, not a user's.
 - Screenshot baselines are Linux-only and the threshold is 0. `npm run vr` on a Mac fails on rasterization differences that are not drift. Use `npm run vr:docker`.
 - The suite covers 16 cases: seven registered screens in both schemes, plus Habit detail empty in both. It does not cover every empty state, extra widths, DPR variants, board PNGs, or native screenshots.
 - The **regression** tab reports a bundled record. It does not fetch, does not read CI artifacts, and does not prove the build you are looking at passed.
 - A shared link carries the present flag, screen key, scheme, and token overrides. It does not carry app state, board history, or the state log, and it cannot write to disk.
-- The tracked `expo-build-properties` plugin sets `ios.enableSceneSupport`, and iOS 27 launches the generated project unmodified. Headless verification cannot approve the SpringBoard confirmation for `mobile://` links. Argent taps it. Native checks cover launch, the Today screen, bundled fonts, scheme registration, and the full interactive flow.
+- The tracked `expo-build-properties` plugin sets `ios.enableSceneSupport`, and iOS 27 launches the generated project unmodified. Headless verification cannot approve the SpringBoard confirmation for `mobile://` links. Native checks cover launch, the Today screen, and bundled fonts.
