@@ -145,10 +145,10 @@ The [implementation spec](spec.md) consolidates the decisions and carries the re
 | 20 | [Screenshot suite and CI](issues/20-screenshot-suite-and-ci.md) | task | 16, 17 (resolved) |
 | 21 | [Regression tab](issues/21-regression-tab.md) | task | 20 (resolved) |
 | 22 | [Shareable URL state](issues/22-shareable-url-state.md) | task | 18 (resolved) |
-| 23 | [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) | task | 16, 19, 20, 21, 22 |
+| 23 | [Simulator verification, README, cleanup](issues/23-simulator-verification-readme-cleanup.md) | task | 16, 19, 20, 21, 22 (resolved) |
 
 ## Handoff
 
 The [implementation spec](spec.md) is ready for agent work. The backlog is tickets 12 to 23. Native analytics stays native-only. The browser sends no events.
 
-**Frontier: 23.** 12 to 22 are resolved. 23 has no unresolved dependency.
+**Frontier: none.** 12 to 23 are resolved. The backlog is empty until the owner files the next ticket.
