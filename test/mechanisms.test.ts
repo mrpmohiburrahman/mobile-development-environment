@@ -190,10 +190,13 @@ test('the state tab exposes no control that drives the store', () => {
   }
 });
 
-test('the render verdict adds no dependency to the app or the server', () => {
-  // If this ever needs a rasterisation library it has stopped being this work and
-  // become the screenshot suite the spec declines to build. The server is
-  // Node-stdlib-only and the app takes no dependency for any part of the studio.
+test('the app and the server take no screenshot or analytics dependency', () => {
+  // The screenshot suite exists now, and the native app sends real events. Neither
+  // changed what this guards: the *app bundle* and the *token server* stay free of
+  // both. Playwright is a root devDependency, so it reaches the checks and never
+  // reaches a shipped screen. Analytics is `fetch` behind adapters, so no vendor
+  // SDK enters the dependency tree either. A suite that quietly installed one would
+  // put a browser engine and a network SDK inside the app it is meant to observe.
   const manifest = JSON.parse(read('mobile/package.json'));
   const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
   for (const forbidden of [
@@ -210,8 +213,16 @@ test('the render verdict adds no dependency to the app or the server', () => {
     'mixpanel',
     '@mixpanel',
   ]) {
-    assert.ok(!dependencies.includes(forbidden), `${forbidden} is a dependency this repo rules out`);
+    assert.ok(!dependencies.includes(forbidden), `${forbidden} is a dependency the app rules out`);
   }
+
+  // The suite's own dependency lives at the root, as a devDependency, and nowhere
+  // else. Pinning it here is what stops the check above passing because someone
+  // moved Playwright into the app instead of removing it.
+  const root = JSON.parse(read('package.json'));
+  assert.ok(root.devDependencies.playwright, 'the root no longer pins playwright for the suite');
+  assert.ok(!root.dependencies?.playwright, 'playwright must stay a devDependency');
+  assert.equal(root.scripts.test, 'node --experimental-strip-types --test --test-concurrency=1 test/*.test.ts');
 
   // And the server: stdlib only, plus its own two modules.
   const server = read('token-server/index.mjs');
@@ -225,10 +236,15 @@ test('the render verdict adds no dependency to the app or the server', () => {
   }
 });
 
-test('the documentation keeps denying a pixel diff, and the test says why', () => {
-  // Deleting the denial should fail here rather than pass review. This pass
-  // measures the render-fidelity condition instead of testing it with
-  // screenshots, and that substitution is only honest while the README says so.
+test('the documentation states what each check is, and what it is not', () => {
+  // Deleting a boundary should fail here rather than pass review.
+  //
+  // This used to assert one thing: that the README keeps denying a pixel diff,
+  // because measuring the render-fidelity condition was a *substitute* for
+  // screenshots and the substitution was only honest while the README said so.
+  // The screenshot suite exists now, so the denial alone would be misleading in
+  // the other direction — a reader would take the suite for the baseline tab.
+  // What has to survive is the contrast: two checks, each saying what it is not.
   const readme = read('README.md');
   assert.match(readme, /not a pixel diff of two screenshots/);
   assert.match(readme, /The five ideas from the talk/);
@@ -242,6 +258,39 @@ test('the documentation keeps denying a pixel diff, and the test says why', () =
   // The analytics line has to state the reason, not just the decision.
   assert.match(readme, /analytics SDK is declined, for three stated reasons/);
   assert.match(readme, /credential-free clone/);
+
+  // The native-only boundary. The studio renders the same screens and sends
+  // nothing, so a reader who only ever opens the web build must be told that
+  // silence is the design and not a missing token.
+  assert.match(readme, /## The native boundary/);
+  assert.match(readme, /Only the native app sends Mixpanel events/);
+  assert.match(readme, /The studio on web renders the same screens and sends nothing/);
+  // `accepted` is an HTTP answer. Claiming delivery from it is the exact
+  // overstatement ADR 0003 and ticket 01 both warn about.
+  assert.match(readme, /not\*\* proof an event reached a report/);
+  assert.match(readme, /Only the project's Events page proves arrival/);
+
+  // The screenshot contract, stated against baseline mode rather than beside it.
+  assert.match(readme, /## The screenshot contract/);
+  assert.match(readme, /is not a screenshot check, and the screenshot suite is not a baseline check/);
+  assert.match(readme, /Baselines are \*\*Linux-only\*\*/);
+  assert.match(readme, /The threshold is 0\./);
+  assert.match(readme, /CI never writes or commits a baseline/);
+  // A record is not a pass. The tab shows an approval, and HEAD can be newer.
+  assert.match(readme, /does not claim this build passed/);
+
+  // The guard's permission rule, with the trailer shape a reader would copy.
+  assert.match(readme, /## The guard/);
+  assert.match(readme, /Guard-Allow: mobile\/src\/app\/habit\.tsx -- fix the weekday label/);
+  assert.match(readme, /The path must be exact and the reason must be non-empty/);
+  assert.match(readme, /a range that will not resolve exits 1/);
+
+  // Cold-clone commands. Two package managers is a real trap: the app uses npm
+  // and the root tools use yarn, and a reader who guesses one gets a suite that
+  // cannot find Playwright.
+  assert.match(readme, /cd mobile && npm ci && cd \.\./);
+  assert.match(readme, /yarn@1\.22\.22 install --frozen-lockfile/);
+  assert.match(readme, /npm run vr:docker/);
 
   const drift = read('mobile/src/ds/drift.ts');
   assert.match(drift, /not a pixel diff of two screenshots/);
