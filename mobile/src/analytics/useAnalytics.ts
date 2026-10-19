@@ -16,27 +16,10 @@ import { Platform } from 'react-native';
 import { createRouteObserver } from './routes.ts';
 import { setStudioRoute, track } from './track.ts';
 
-const observer = createRouteObserver({
-  track: (event, properties) => {
-    console.log('[analytics]', event, JSON.stringify(properties ?? {}));
-    track(event, properties);
-  },
-  platform: Platform.OS,
-  onStudioRoute: setStudioRoute,
-});
-
-const persistenceProbe = (() => {
-  let seen = false;
-  return () => {
-    if (seen) return;
-    seen = true;
-    console.log('[analytics] persistence-probe: install id alive after relaunch');
-  };
-})();
+const observer = createRouteObserver({ track, platform: Platform.OS, onStudioRoute: setStudioRoute });
 
 export function useAnalytics(): void {
   const pathname = usePathname();
-  persistenceProbe();
   useEffect(() => {
     observer.onPathname(pathname);
   }, [pathname]);
