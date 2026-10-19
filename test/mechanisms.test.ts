@@ -269,8 +269,11 @@ test('the documentation states what each check is, and what it is not', () => {
   // overstatement ADR 0003 and ticket 01 both warn about.
   assert.match(readme, /not\*\* proof an event reached a report/);
   assert.match(readme, /Only the project's Events page proves arrival/);
-  assert.match(readme, /This environment has not verified Events-page arrival/);
-  assert.match(readme, /Events-page arrival, the per-launch App Opened count, and toggle payload contents stay unverified/);
+  // The proof has to name its scope: one simulator install, read on the Events
+  // page, not a browser request and not a claim about real users.
+  assert.match(readme, /read the Events page/);
+  assert.match(readme, /native end-to-end proof from one iOS Simulator install only/);
+  assert.match(readme, /No Android runtime verification has run/);
 
   // The screenshot contract, stated against baseline mode rather than beside it.
   assert.match(readme, /## The screenshot contract/);
